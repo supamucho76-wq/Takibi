@@ -21,11 +21,14 @@ targets:
       - path: Sources
         excludes:
           - Resources
-    resources:
       - path: Sources/Resources/Assets.xcassets
+        buildPhase: resources
       - path: Sources/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
       - path: Sources/Resources/Icon-60@2x.png
+        buildPhase: resources
       - path: Sources/Resources/Icon-60@3x.png
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.supamucho76.takibi
