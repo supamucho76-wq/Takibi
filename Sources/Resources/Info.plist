@@ -10,6 +10,22 @@
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleIconName</key>
     <string>AppIcon</string>
+    <key>CFBundleIconFiles</key>
+    <array>
+        <string>Icon-60</string>
+    </array>
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key>
+            <array>
+                <string>Icon-60</string>
+            </array>
+            <key>CFBundleIconName</key>
+            <string>AppIcon</string>
+        </dict>
+    </dict>
     <key>CFBundleDisplayName</key>
     <string>くべる</string>
     <key>CFBundleInfoDictionaryVersion</key>
