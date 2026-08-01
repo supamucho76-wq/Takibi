@@ -7,6 +7,7 @@ struct FireUniforms {
     float heat;
     float deltaTime;
     float quality;
+    float burst;
 };
 
 struct QuadOut {
@@ -93,12 +94,18 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
         + 0.055 * (fbm4(float2(u.time * 0.37, 7.2)) - 0.5) * 2.0
         + 0.025 * sin(u.time * 3.71 + valueNoise(float2(u.time * 0.21, 2.4)) * 5.0);
 
-    float targetHeight = mix(0.105, 0.76, pow(heat, 0.70));
+    // Keep the flame comfortably inside the phone while still allowing a short
+    // ignition jump when a new log lands.
+    float targetHeight = mix(0.085, 0.60, pow(heat, 0.70));
+    targetHeight *= 1.0 + u.burst * 0.14;
     float y = p.y / max(targetHeight, 0.001);
     float turbulence = smoothstep(-0.05, 1.0, y);
 
     // Two domain-warp stages create rolling folds instead of a periodic flame silhouette.
-    float2 advected = float2(p.x * 3.8, p.y * 3.2 - u.time * mix(0.46, 0.83, heat));
+    float2 advected = float2(
+        p.x * 3.8,
+        p.y * 3.2 - u.time * mix(0.46, 0.83, heat) - u.burst * 0.24
+    );
     float2 warpA = float2(
         fbm4(advected + float2(1.7, 5.3)),
         fbm4(advected * 1.07 + float2(8.1, 2.2))
@@ -115,23 +122,57 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float warpedY = p.y + warpA.y * 0.018 + warpB.y * 0.011;
     float warpedYN = warpedY / max(targetHeight, 0.001);
 
-    float baseWidth = mix(0.048, 0.176, pow(heat, 0.78));
+    float baseWidth = mix(0.042, 0.148, pow(heat, 0.78)) * (1.0 + u.burst * 0.10);
     float taper = mix(1.10, 0.085, smoothstep(-0.05, 1.02, warpedYN));
     float width = max(0.009, baseWidth * taper);
-    float coreShape = exp(-pow(abs(warpedX) / width, 1.72));
     float verticalMask = smoothstep(-0.055, 0.015, warpedY)
         * (1.0 - smoothstep(0.79, 1.08, warpedYN));
+
+    // Low, medium and high heat have genuinely different silhouettes. A low
+    // fire is one narrow tongue, medium heat forks in two, and high heat grows
+    // a wide crown with several independently moving side flames.
+    float smallCore = exp(-pow(abs(warpedX) / width, 1.82)) * verticalMask;
+
+    float sideWidth = width * 0.72 + 0.003;
+    float leftFork = exp(-pow(abs(warpedX + baseWidth * 0.50) / sideWidth, 1.70));
+    float rightFork = exp(-pow(abs(warpedX - baseWidth * 0.46) / sideWidth, 1.70));
+    float leftForkY = smoothstep(-0.04, 0.03, warpedY)
+        * (1.0 - smoothstep(0.55, 0.78, warpedYN));
+    float rightForkY = smoothstep(-0.04, 0.03, warpedY)
+        * (1.0 - smoothstep(0.43, 0.68, warpedYN));
+    float mediumShape = max(
+        smallCore * 0.92,
+        max(leftFork * leftForkY * 0.82, rightFork * rightForkY * 0.76)
+    );
+
+    float crownWidth = width * 0.62 + 0.004;
+    float outerLeft = exp(-pow(abs(warpedX + baseWidth * 0.92) / crownWidth, 1.58));
+    float outerRight = exp(-pow(abs(warpedX - baseWidth * 0.88) / crownWidth, 1.58));
+    float outerLeftY = smoothstep(-0.045, 0.025, warpedY)
+        * (1.0 - smoothstep(0.50, 0.74, warpedYN));
+    float outerRightY = smoothstep(-0.045, 0.025, warpedY)
+        * (1.0 - smoothstep(0.36, 0.61, warpedYN));
+    float crownPulse = 0.82 + 0.18 * sin(u.time * 3.4 + warpedYN * 11.0 + warpB.y * 5.0);
+    float largeShape = max(
+        mediumShape,
+        max(outerLeft * outerLeftY, outerRight * outerRightY) * crownPulse
+    );
+
+    float mediumBlend = smoothstep(0.34, 0.52, heat);
+    float largeBlend = smoothstep(0.67, 0.82, heat);
+    float stagedShape = mix(smallCore, mediumShape, mediumBlend);
+    stagedShape = mix(stagedShape, largeShape, largeBlend);
 
     float detail = fbm4(float2(warpedX * 10.5, warpedY * 8.0 - u.time * 1.34));
     float fine = valueNoise(float2(warpedX * 31.0, warpedY * 24.0 - u.time * 2.42));
     float breakupThreshold = mix(0.24, 0.72, smoothstep(0.25, 1.0, warpedYN));
     float breakup = smoothstep(breakupThreshold - 0.20, breakupThreshold + 0.14, detail * 0.78 + fine * 0.22);
     float coherentBase = 1.0 - smoothstep(0.18, 0.82, warpedYN);
-    float flameMask = coreShape * verticalMask * max(coherentBase * 0.68, breakup);
+    float flameMask = stagedShape * max(coherentBase * 0.68, breakup);
 
     float flamePresence = smoothstep(0.095, 0.235, heat);
     float temperature = clamp(
-        flameMask * flamePresence * (0.69 + detail * 0.42) * slowFlicker,
+        flameMask * flamePresence * (0.65 + detail * 0.38) * slowFlicker * (1.0 + u.burst * 0.24),
         0.0,
         1.0
     );
@@ -139,7 +180,10 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
 
     // A wider analytic halo is the deliberately cheap single-pass bloom approximation.
     float haloWidth = width * 2.25 + 0.018;
-    float halo = exp(-pow(abs(warpedX) / haloWidth, 1.45))
+    float halo = max(
+        exp(-pow(abs(warpedX) / haloWidth, 1.45)),
+        stagedShape * 0.52
+    )
         * verticalMask
         * (1.0 - smoothstep(0.62, 1.05, warpedYN))
         * flamePresence;
@@ -152,7 +196,7 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float ember = exp(-dot(emberP, emberP) * 1.38) * emberBreath * emberNoise;
     ember *= mix(0.52, 1.0, heat);
 
-    float3 flameColor = blackBodyRamp(temperature) * temperature * mix(1.2, 2.05, heat);
+    float3 flameColor = blackBodyRamp(temperature) * temperature * mix(1.08, 1.66, heat);
     float3 haloColor = float3(1.0, 0.16, 0.008) * halo;
     float3 emberColor = mix(float3(0.36, 0.006, 0.0), float3(1.0, 0.105, 0.006), ember) * ember;
 
