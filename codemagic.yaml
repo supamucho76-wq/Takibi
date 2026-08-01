@@ -64,6 +64,19 @@ workflows:
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
+      - name: Verify app icon in IPA
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(find build/ios/ipa -name '*.ipa' -print -quit)
+          test -n "$IPA_PATH"
+          rm -rf build/ipa-check
+          mkdir -p build/ipa-check
+          unzip -q "$IPA_PATH" -d build/ipa-check
+          APP_PATH=$(find build/ipa-check/Payload -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP_PATH"
+          ICON_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$APP_PATH/Info.plist")
+          test "$ICON_NAME" = "AppIcon"
+          test -f "$APP_PATH/Icon-60@2x.png"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
