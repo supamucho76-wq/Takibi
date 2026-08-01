@@ -22,9 +22,10 @@ targets:
         excludes:
           - Resources
     resources:
-      - path: Sources/Resources
-        excludes:
-          - Info.plist
+      - path: Sources/Resources/Assets.xcassets
+      - path: Sources/Resources/PrivacyInfo.xcprivacy
+      - path: Sources/Resources/Icon-60@2x.png
+      - path: Sources/Resources/Icon-60@3x.png
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.supamucho76.takibi
