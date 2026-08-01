@@ -4,9 +4,11 @@ import SwiftUI
 struct FireView: UIViewRepresentable {
     let heat: Double
     let isActive: Bool
+    let burnSequence: Int
 
     final class Coordinator {
         var renderer: FireRenderer?
+        var lastBurnSequence = 0
     }
 
     func makeCoordinator() -> Coordinator {
@@ -33,6 +35,7 @@ struct FireView: UIViewRepresentable {
         renderer.heat = Float(heat)
         renderer.isActive = isActive
         context.coordinator.renderer = renderer
+        context.coordinator.lastBurnSequence = burnSequence
         view.delegate = renderer
         return view
     }
@@ -40,6 +43,10 @@ struct FireView: UIViewRepresentable {
     func updateUIView(_ view: MTKView, context: Context) {
         context.coordinator.renderer?.heat = Float(heat)
         context.coordinator.renderer?.isActive = isActive
+        if burnSequence != context.coordinator.lastBurnSequence {
+            context.coordinator.renderer?.triggerWoodBurst()
+            context.coordinator.lastBurnSequence = burnSequence
+        }
         view.preferredFramesPerSecond = ProcessInfo.processInfo.isLowPowerModeEnabled ? 30 : 60
         view.isPaused = !isActive
     }

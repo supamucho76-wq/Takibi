@@ -9,6 +9,7 @@ struct FireUniforms {
     var heat: Float
     var deltaTime: Float
     var quality: Float
+    var burst: Float
 }
 
 struct SparkVertex {
@@ -44,6 +45,7 @@ final class FireRenderer: NSObject, MTKViewDelegate {
     private var sampledFrameTime: Double = 0
     private var sampledFrames = 0
     private var metricsElapsed: Double = 0
+    private var burstEnergy: Float = 0
 
     init(view: MTKView) {
         guard
@@ -97,6 +99,7 @@ final class FireRenderer: NSObject, MTKViewDelegate {
         let delta = min(max(now - lastFrameTime, 1.0 / 240.0), 0.1)
         lastFrameTime = now
         displayedHeat += (heat - displayedHeat) * min(1, Float(delta) * 2.8)
+        burstEnergy = max(0, burstEnergy - Float(delta) * 1.35)
 
         updateParticles(deltaTime: Float(delta), heat: displayedHeat)
 
@@ -105,7 +108,8 @@ final class FireRenderer: NSObject, MTKViewDelegate {
             time: Float(now - startTime),
             heat: min(max(displayedHeat, 0), 100),
             deltaTime: Float(delta),
-            quality: qualityScale
+            quality: qualityScale,
+            burst: burstEnergy
         )
 
         guard
@@ -124,6 +128,13 @@ final class FireRenderer: NSObject, MTKViewDelegate {
         commandBuffer.commit()
 
         recordPerformance(frameTime: delta, view: view)
+    }
+
+    func triggerWoodBurst() {
+        burstEnergy = 1
+        for _ in 0..<28 {
+            spawnParticle(heat: min(max(displayedHeat / 100, 0), 1), burst: true)
+        }
     }
 
     private func drawSparks(encoder: MTLRenderCommandEncoder, uniforms: inout FireUniforms) {
