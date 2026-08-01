@@ -2,6 +2,10 @@ import SwiftUI
 
 struct WoodPileView: View {
     let heat: Double
+    let burnSequence: Int
+
+    @State private var arrivalScale: CGFloat = 1
+    @State private var arrivalGlow: Double = 0
 
     private var visuals: FireVisualState { FireVisualState(heat: heat) }
 
@@ -24,8 +28,26 @@ struct WoodPileView: View {
                     .saturation(0.72 + visuals.environmentLight * 0.30)
                     .shadow(color: .orange.opacity(0.13 * visuals.environmentLight), radius: 7)
             }
+
+            Circle()
+                .fill(.orange.opacity(arrivalGlow * 0.34))
+                .frame(width: 170, height: 80)
+                .blur(radius: 24)
+                .blendMode(.plusLighter)
         }
+        .scaleEffect(arrivalScale)
         .animation(.easeInOut(duration: 0.85), value: visuals.visibleLogCount)
+        .onChange(of: burnSequence) { _, _ in
+            arrivalScale = 0.90
+            arrivalGlow = 1
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.56)) {
+                arrivalScale = 1.06
+            }
+            withAnimation(.easeOut(duration: 0.72)) {
+                arrivalScale = 1
+                arrivalGlow = 0
+            }
+        }
     }
 
     private func angle(for index: Int) -> Angle {
