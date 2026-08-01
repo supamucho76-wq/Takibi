@@ -35,15 +35,15 @@ workflows:
     name: Signed TestFlight Build
     instance_type: mac_mini_m2
     max_build_duration: 45
+    integrations:
+      app_store_connect: Codemagic
     triggering:
       events:
         - tag
     environment:
       xcode: 16.4
-      groups:
-        - appstore_credentials
-        - ios_config
       vars:
+        BUNDLE_ID: com.supamucho76.takibi
         XCODE_PROJECT: Takibi.xcodeproj
         XCODE_SCHEME: Takibi
     scripts:
@@ -72,7 +72,5 @@ workflows:
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_testflight: true
