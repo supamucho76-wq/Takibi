@@ -41,7 +41,7 @@ workflows:
       events:
         - tag
     environment:
-      xcode: 16.4
+      xcode: 26.4
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.supamucho76.takibi
