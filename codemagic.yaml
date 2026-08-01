@@ -55,6 +55,8 @@ workflows:
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate project
         script: xcodegen generate
+      - name: Install Metal Toolchain
+        script: xcodebuild -downloadComponent metalToolchain
       - name: Configure signing
         script: xcode-project use-profiles
       - name: Build signed IPA
