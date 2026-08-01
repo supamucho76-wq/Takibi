@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum HeatEngine {
     static func decayedHeat(
@@ -32,6 +33,7 @@ struct FireVisualState: Equatable {
     let environmentLight: Double
     let sparkDensity: Double
     let visibleLogCount: Int
+    let stage: FireStage
 
     init(heat: Double) {
         let t = HeatEngine.normalized(heat)
@@ -43,11 +45,51 @@ struct FireVisualState: Equatable {
         environmentLight = 0.08 + 0.92 * pow(t, 1.25)
         sparkDensity = Self.smoothstep(0.12, 0.95, t)
         visibleLogCount = min(6, max(1, 1 + Int((t * 5.5).rounded(.down))))
+        switch t {
+        case ..<0.20: stage = .embers
+        case ..<0.46: stage = .small
+        case ..<0.74: stage = .steady
+        default: stage = .roaring
+        }
     }
 
     private static func smoothstep(_ edge0: Double, _ edge1: Double, _ value: Double) -> Double {
         let x = min(max((value - edge0) / (edge1 - edge0), 0), 1)
         return x * x * (3 - 2 * x)
+    }
+}
+
+enum FireStage: Equatable {
+    case embers
+    case small
+    case steady
+    case roaring
+
+    var title: String {
+        switch self {
+        case .embers: "熾火"
+        case .small: "小さな炎"
+        case .steady: "よく燃えている"
+        case .roaring: "大きな炎"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .embers: "circle.dotted.circle.fill"
+        case .small: "flame"
+        case .steady: "flame.fill"
+        case .roaring: "flame.circle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .embers: .red
+        case .small: .orange
+        case .steady: .yellow
+        case .roaring: Color(red: 1.0, green: 0.92, blue: 0.62)
+        }
     }
 }
 
