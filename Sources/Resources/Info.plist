@@ -40,6 +40,8 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSMotionUsageDescription</key>
     <string>歩数に応じて薪を集めるために、モーションと運動のデータを使用します。</string>
     <key>UIApplicationSceneManifest</key>
