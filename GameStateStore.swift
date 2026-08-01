@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 actor GameStateStore {
-    private let logger = Logger(subsystem: "com.example.Takibi", category: "Persistence")
+    private let logger = Logger(subsystem: "com.supamucho76.takibi", category: "Persistence")
     private let fileManager: FileManager
     private let fileURL: URL
 

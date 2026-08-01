@@ -29,7 +29,7 @@ final class FireRenderer: NSObject, MTKViewDelegate {
     var heat: Float = Float(GameConstants.initialHeat)
     var isActive = true
 
-    private let logger = Logger(subsystem: "com.example.Takibi", category: "FireRenderer")
+    private let logger = Logger(subsystem: "com.supamucho76.takibi", category: "FireRenderer")
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private let flamePipeline: MTLRenderPipelineState
@@ -243,4 +243,3 @@ final class FireRenderer: NSObject, MTKViewDelegate {
         return try device.makeRenderPipelineState(descriptor: descriptor)
     }
 }
-

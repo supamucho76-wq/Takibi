@@ -27,7 +27,7 @@ targets:
           - Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.Takibi
+        PRODUCT_BUNDLE_IDENTIFIER: com.supamucho76.takibi
         PRODUCT_NAME: Takibi
         INFOPLIST_FILE: Sources/Resources/Info.plist
         PRODUCT_MODULE_NAME: Takibi
@@ -49,5 +49,5 @@ targets:
       - target: Takibi
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.TakibiTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.supamucho76.takibiTests
         GENERATE_INFOPLIST_FILE: true
