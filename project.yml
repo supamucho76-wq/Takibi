@@ -1,0 +1,53 @@
+name: Takibi
+options:
+  minimumXcodeGenVersion: 2.38.0
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+targets:
+  Takibi:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+        excludes:
+          - Resources
+    resources:
+      - path: Sources/Resources
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.Takibi
+        PRODUCT_NAME: Takibi
+        INFOPLIST_FILE: Sources/Resources/Info.plist
+        PRODUCT_MODULE_NAME: Takibi
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: false
+        ENABLE_PREVIEWS: true
+    scheme:
+      testTargets:
+        - TakibiTests
+      gatherCoverageData: true
+  TakibiTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Takibi
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.TakibiTests
+        GENERATE_INFOPLIST_FILE: true
