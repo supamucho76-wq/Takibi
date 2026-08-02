@@ -11,7 +11,7 @@ enum GameConstants {
     static let standardWoodBurnDuration: TimeInterval = 8 * 60 * 60
     // Five minutes of walking should feel like an intentional trip, not a few
     // laps around the desk. Rare collectibles provide the shorter milestones.
-    static let stepsPerWood = 500
+    static let stepsPerWood = 1_000
     static let pedometerHistoryLimit: TimeInterval = 7 * 24 * 60 * 60
     static let starterWoodCount = 3
 }

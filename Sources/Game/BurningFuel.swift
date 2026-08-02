@@ -103,9 +103,13 @@ enum BurningFuelEngine {
             return min(storedHeat, GameConstants.minimumHeat + 4)
         }
         let countMultiplier = min(1.18, 0.62 + Double(count) * 0.13)
+        let visibleFuelFloor = min(
+            GameConstants.maximumHeat,
+            12 + Double(count) * 16
+        )
         return min(
             GameConstants.maximumHeat,
-            max(GameConstants.minimumHeat, storedHeat * countMultiplier)
+            max(visibleFuelFloor, storedHeat * countMultiplier)
         )
     }
 }

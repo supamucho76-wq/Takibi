@@ -32,6 +32,8 @@ struct FireVisualState: Equatable {
     let brightness: Double
     let environmentLight: Double
     let sparkDensity: Double
+    let smokeDensity: Double
+    let companionOpacity: Double
     let visibleLogCount: Int
     let stage: FireStage
 
@@ -43,13 +45,17 @@ struct FireVisualState: Equatable {
         flameWidth = 0.18 + 0.72 * pow(t, 0.86)
         brightness = 0.20 + 0.80 * pow(t, 0.55)
         environmentLight = 0.08 + 0.92 * pow(t, 1.25)
-        sparkDensity = Self.smoothstep(0.12, 0.95, t)
+        sparkDensity = 0.05 + 0.95 * Self.smoothstep(0.10, 0.92, t)
+        smokeDensity = min(max(0.82 - t * 0.68, 0.10), 0.78)
+        companionOpacity = Self.smoothstep(0.66, 0.94, t)
         visibleLogCount = min(6, max(1, 1 + Int((t * 5.5).rounded(.down))))
+
         switch t {
-        case ..<0.20: stage = .embers
-        case ..<0.46: stage = .small
-        case ..<0.74: stage = .steady
-        default: stage = .roaring
+        case ..<0.18: stage = .fading
+        case ..<0.38: stage = .small
+        case ..<0.68: stage = .steady
+        case ..<0.90: stage = .bonfire
+        default: stage = .festival
         }
     }
 
@@ -59,37 +65,62 @@ struct FireVisualState: Equatable {
     }
 }
 
-enum FireStage: Equatable {
-    case embers
+enum FireStage: Int, Codable, CaseIterable, Equatable {
+    case fading = 1
     case small
     case steady
-    case roaring
+    case bonfire
+    case festival
+
+    var level: Int { rawValue }
 
     var title: String {
         switch self {
-        case .embers: "熾火"
-        case .small: "小さな炎"
-        case .steady: "よく燃えている"
-        case .roaring: "大きな炎"
+        case .fading: "消えかけ"
+        case .small: "小さな火"
+        case .steady: "安定した火"
+        case .bonfire: "大きな焚き火"
+        case .festival: "祝祭の炎"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .fading: "火が弱まっています"
+        case .small: "小さな火が息づいています"
+        case .steady: "今夜の火は安定しています"
+        case .bonfire: "森の奥まで光が届いています"
+        case .festival: "森が祝祭の光に包まれています"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .embers: "circle.dotted.circle.fill"
+        case .fading: "circle.dotted.circle.fill"
         case .small: "flame"
         case .steady: "flame.fill"
-        case .roaring: "flame.circle.fill"
+        case .bonfire: "flame.circle.fill"
+        case .festival: "sparkles"
         }
     }
 
     var tint: Color {
         switch self {
-        case .embers: .red
+        case .fading: .red
         case .small: .orange
         case .steady: .yellow
-        case .roaring: Color(red: 1.0, green: 0.92, blue: 0.62)
+        case .bonfire: Color(red: 1.0, green: 0.92, blue: 0.62)
+        case .festival: Color(red: 1.0, green: 0.72, blue: 0.95)
+        }
+    }
+
+    var ambienceVolume: Float {
+        switch self {
+        case .fading: 0.10
+        case .small: 0.16
+        case .steady: 0.23
+        case .bonfire: 0.32
+        case .festival: 0.42
         }
     }
 }
-
