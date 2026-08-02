@@ -116,11 +116,11 @@ enum FireStage: Int, Codable, CaseIterable, Equatable {
 
     var ambienceVolume: Float {
         switch self {
-        case .fading: 0.10
-        case .small: 0.16
-        case .steady: 0.23
-        case .bonfire: 0.32
-        case .festival: 0.42
+        case .fading: 0.14
+        case .small: 0.22
+        case .steady: 0.30
+        case .bonfire: 0.38
+        case .festival: 0.46
         }
     }
 }
