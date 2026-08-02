@@ -14,6 +14,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastAwardedWoodCount = 0
     @Published private(set) var unlockSequence = 0
     @Published private(set) var lastUnlockedReward: CollectibleReward?
+    @Published private(set) var stepRewardReceipt: StepRewardReceipt?
+    @Published private(set) var stepRewardSequence = 0
 
     private let store: GameStateStore
     private let pedometer: PedometerService
@@ -60,6 +62,23 @@ final class AppModel: ObservableObject {
         activeBurningFuels.last?.expiresAt
     }
 
+    var fireStatus: FireStatus {
+        let now = Date()
+        let fuels = BurningFuelEngine.active(state.burningFuels, at: now)
+        let end = fuels.last?.expiresAt
+        return FireStatus(
+            stage: visualState.stage,
+            message: visualState.stage.message,
+            burningFuelCount: fuels.count,
+            remainingDuration: max(0, end?.timeIntervalSince(now) ?? 0),
+            nextFuelExpiresAt: fuels.first?.expiresAt
+        )
+    }
+
+    var nextStepRewardTarget: StepRewardTarget {
+        StepRewardEngine.nextTarget(totalSteps: state.totalStepsAllTime)
+    }
+
     var standardWoodCount: Int {
         state.standardWoodCount
     }
@@ -92,6 +111,48 @@ final class AppModel: ObservableObject {
         state.onboardingCompleted = true
         scheduleSave()
         activatePedometer()
+    }
+
+    @discardableResult
+    func igniteOnboardingFire(now: Date = Date()) -> Bool {
+        guard !state.onboardingCompleted else { return false }
+        state.burningFuels = []
+        state.heat = GameConstants.minimumHeat + 2
+        state.heatUpdatedAt = now
+        if state.woodInventory[WoodCatalog.standard.id, default: 0] < 1 {
+            state.woodInventory[WoodCatalog.standard.id] = 1
+        }
+        state.selectedWoodID = WoodCatalog.standard.id
+        return burnStandardWood(now: now)
+    }
+
+    func requestMotionPermission() async {
+        motionPermission = pedometer.permissionState
+        guard pedometer.isAvailable else {
+            motionPermission = .unavailable
+            pedometerMessage = "この端末では歩数を取得できません。設定の疑似歩数で体験できます。"
+            return
+        }
+        let end = Date()
+        do {
+            _ = try await pedometer.query(from: end.addingTimeInterval(-60), to: end)
+            motionPermission = pedometer.permissionState
+            pedometerMessage = nil
+        } catch {
+            motionPermission = pedometer.permissionState
+            pedometerMessage = message(for: error)
+        }
+    }
+
+    func dismissStepRewardReceipt() {
+        stepRewardReceipt = nil
+    }
+
+    func addSimulatedSteps(_ steps: Int, now: Date = Date()) {
+        let accepted = max(0, steps)
+        guard accepted > 0 else { return }
+        todaySteps += accepted
+        applySteps(accepted, processedAt: now)
     }
 
     @discardableResult
@@ -181,6 +242,8 @@ final class AppModel: ObservableObject {
             lastAwardedWoodCount = 0
             unlockSequence = 0
             lastUnlockedReward = nil
+            stepRewardReceipt = nil
+            stepRewardSequence = 0
             pedometerMessage = nil
             motionPermission = pedometer.permissionState
         }
@@ -292,6 +355,14 @@ final class AppModel: ObservableObject {
             previousTotal: state.totalStepsAllTime
         )
         state.totalStepsAllTime = result.newTotalSteps
+        let smallRewards = StepRewardEngine.evaluate(
+            from: previousSteps,
+            to: result.newTotalSteps
+        )
+        if smallRewards.smallRewardCount > 0 {
+            state.stepProgress.totalSmallRewards += smallRewards.smallRewardCount
+            state.stepProgress.fireSparkCount += smallRewards.fireSparkCount
+        }
         if result.awardedWood > 0 {
             awardWalkingWood(from: previousSteps, to: result.newTotalSteps)
             lastAwardedWoodCount = result.awardedWood
@@ -306,6 +377,32 @@ final class AppModel: ObservableObject {
             unlockSequence += 1
         }
         state.lastPedometerProcessedAt = max(state.lastPedometerProcessedAt, processedAt)
+        if result.acceptedSteps >= 50 || smallRewards.smallRewardCount > 0 || result.awardedWood > 0 {
+            var rewards: [Reward] = []
+            if smallRewards.fireSparkCount > 0 {
+                rewards.append(
+                    Reward(
+                        kind: .fireSparks,
+                        title: "火の粉",
+                        amount: smallRewards.fireSparkCount
+                    )
+                )
+            }
+            if result.awardedWood > 0 {
+                rewards.append(
+                    Reward(
+                        kind: .wood,
+                        title: "歩いて得た薪",
+                        amount: result.awardedWood
+                    )
+                )
+            }
+            stepRewardReceipt = StepRewardReceipt(
+                addedSteps: result.acceptedSteps,
+                rewards: rewards
+            )
+            stepRewardSequence += 1
+        }
         scheduleSave()
     }
 
