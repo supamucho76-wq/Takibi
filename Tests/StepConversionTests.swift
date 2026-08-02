@@ -2,30 +2,30 @@ import XCTest
 @testable import Takibi
 
 final class StepConversionTests: XCTestCase {
-    func testCrossingFiveHundredStepBoundaryAwardsWood() {
-        let result = StepConversion.convert(newSteps: 2, previousTotal: 499)
+    func testCrossingThousandStepBoundaryAwardsWood() {
+        let result = StepConversion.convert(newSteps: 2, previousTotal: 999)
         XCTAssertEqual(result.awardedWood, 1)
-        XCTAssertEqual(result.newTotalSteps, 501)
+        XCTAssertEqual(result.newTotalSteps, 1_001)
     }
 
     func testRemainderCarriesAcrossUpdates() {
-        let first = StepConversion.convert(newSteps: 300, previousTotal: 0)
-        let second = StepConversion.convert(newSteps: 200, previousTotal: first.newTotalSteps)
+        let first = StepConversion.convert(newSteps: 600, previousTotal: 0)
+        let second = StepConversion.convert(newSteps: 400, previousTotal: first.newTotalSteps)
         XCTAssertEqual(first.awardedWood, 0)
         XCTAssertEqual(second.awardedWood, 1)
     }
 
     func testMultipleRewardsCanBeAwardedAtOnce() {
-        let result = StepConversion.convert(newSteps: 1_350, previousTotal: 480)
+        let result = StepConversion.convert(newSteps: 2_350, previousTotal: 980)
         XCTAssertEqual(result.awardedWood, 3)
-        XCTAssertEqual(result.newTotalSteps, 1_830)
+        XCTAssertEqual(result.newTotalSteps, 3_330)
     }
 
     func testNegativeStepsAreIgnored() {
-        let result = StepConversion.convert(newSteps: -20, previousTotal: 490)
+        let result = StepConversion.convert(newSteps: -20, previousTotal: 990)
         XCTAssertEqual(result.acceptedSteps, 0)
         XCTAssertEqual(result.awardedWood, 0)
-        XCTAssertEqual(result.newTotalSteps, 490)
+        XCTAssertEqual(result.newTotalSteps, 990)
     }
 
     func testPedometerWindowIsLimitedToSevenDays() {

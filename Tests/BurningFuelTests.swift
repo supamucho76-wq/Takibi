@@ -59,6 +59,17 @@ final class BurningFuelTests: XCTestCase {
         XCTAssertLessThan(oneLogHeat, threeLogHeat)
     }
 
+    func testVisibleFuelKeepsFireAtAReadableStage() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let queue = BurningFuelEngine.starterQueue(at: start)
+
+        let oneLogHeat = BurningFuelEngine.visualHeat(storedHeat: 8, fuels: [queue[2]], at: start)
+        let threeLogHeat = BurningFuelEngine.visualHeat(storedHeat: 8, fuels: queue, at: start)
+
+        XCTAssertEqual(FireVisualState(heat: oneLogHeat).stage, .small)
+        XCTAssertEqual(FireVisualState(heat: threeLogHeat).stage, .steady)
+    }
+
     func testSelectedFuelSurvivesSaveWithZeroInventory() throws {
         let start = Date(timeIntervalSince1970: 1_000)
         let charcoal = try XCTUnwrap(WoodCatalog.wood(id: "oak"))
@@ -78,5 +89,22 @@ final class BurningFuelTests: XCTestCase {
         let restored = try JSONDecoder().decode(GameState.self, from: JSONEncoder().encode(state))
         XCTAssertEqual(restored.selectedWoodID, charcoal.id)
         XCTAssertEqual(restored.woodInventory[charcoal.id], 0)
+    }
+
+    func testOlderSaveWithoutStepProgressStillLoads() throws {
+        let original = GameState.initial(at: Date(timeIntervalSince1970: 1_000))
+        let encoded = try JSONEncoder().encode(original)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        object.removeValue(forKey: "stepProgress")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let restored = try JSONDecoder().decode(GameState.self, from: legacyData)
+
+        XCTAssertEqual(restored.stepProgress, .empty)
+        XCTAssertEqual(restored.woodInventory, original.woodInventory)
+        XCTAssertEqual(restored.selectedWoodID, original.selectedWoodID)
+        XCTAssertEqual(restored.burningFuels, original.burningFuels)
     }
 }

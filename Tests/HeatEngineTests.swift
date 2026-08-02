@@ -35,10 +35,11 @@ final class HeatEngineTests: XCTestCase {
     }
 
     func testVisualStagesChangeAcrossHeatRanges() {
-        XCTAssertEqual(FireVisualState(heat: 8).stage, .embers)
+        XCTAssertEqual(FireVisualState(heat: 8).stage, .fading)
         XCTAssertEqual(FireVisualState(heat: 30).stage, .small)
         XCTAssertEqual(FireVisualState(heat: 55).stage, .steady)
-        XCTAssertEqual(FireVisualState(heat: 90).stage, .roaring)
+        XCTAssertEqual(FireVisualState(heat: 78).stage, .bonfire)
+        XCTAssertEqual(FireVisualState(heat: 95).stage, .festival)
     }
 }
 
