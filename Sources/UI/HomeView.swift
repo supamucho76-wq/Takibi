@@ -13,6 +13,8 @@ struct HomeView: View {
     @State private var showWoodReward = false
     @State private var rewardedWoodCount = 0
     @State private var showUnlockReward = false
+    @State private var preparedWood: WoodType?
+    @State private var throwDrag: CGSize = .zero
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
@@ -55,6 +57,15 @@ struct HomeView: View {
 
                 overlay
                     .zIndex(3)
+
+                GeometryReader { proxy in
+                    if let wood = preparedWood {
+                        throwableWood(wood, in: proxy.size)
+                    }
+                }
+                .ignoresSafeArea()
+                .zIndex(4)
+                .allowsHitTesting(preparedWood != nil)
             }
         }
         .sheet(isPresented: $settingsPresented) {
@@ -322,16 +333,13 @@ struct HomeView: View {
     private var burnButton: some View {
         Button(action: burnWood) {
             HStack(spacing: 12) {
-                Image("WoodLog")
-                    .resizable()
-                    .scaledToFit()
+                WoodIconView(wood: appModel.selectedWood)
                     .frame(width: 52, height: 36)
-                    .rotationEffect(.degrees(-8))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(appModel.selectedWood.name)を投げる")
+                    Text(preparedWood == nil ? "\(appModel.selectedWood.name)を持つ" : "薪を上へスワイプ")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
-                    Text(appModel.selectedWoodCount > 0 ? "放り投げて、炎へくべる" : "この薪はありません")
+                    Text(appModel.selectedWoodCount > 0 ? "手元に出してから投げます" : "この燃料はありません")
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.70))
                 }
@@ -420,14 +428,9 @@ struct HomeView: View {
         if appModel.selectedWoodCount > 0 {
             emptyInventoryHint = false
             isThrowingWood = true
-            woodThrowController.throwWood(appModel.selectedWood)
-
-            Task { @MainActor in
-                // Never consume a log or flare the fire without a visible
-                // landing. This timeout only unlocks the button after an
-                // interrupted animation; the physics impact performs the burn.
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                if isThrowingWood { isThrowingWood = false }
+            throwDrag = .zero
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.68)) {
+                preparedWood = appModel.selectedWood
             }
         } else {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
@@ -459,6 +462,58 @@ struct HomeView: View {
                 showBurnConfirmation = false
             }
         }
+    }
+
+    private func throwableWood(_ wood: WoodType, in size: CGSize) -> some View {
+        VStack(spacing: 7) {
+            Label("上へスワイプして投げる", systemImage: "hand.draw.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.black.opacity(0.68), in: Capsule())
+
+            WoodIconView(wood: wood)
+                .frame(width: 124, height: 66)
+                .padding(8)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color(wood.flameTint).opacity(0.72), lineWidth: 2))
+                .shadow(color: Color(wood.flameTint).opacity(0.50), radius: 18)
+        }
+        .contentShape(Rectangle())
+        .position(x: size.width / 2, y: size.height * 0.76)
+        .offset(throwDrag)
+        .rotationEffect(.degrees(Double(throwDrag.width) * 0.08))
+        .scaleEffect(1 + min(0.12, max(0, -throwDrag.height / 900)))
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    throwDrag = value.translation
+                }
+                .onEnded { value in
+                    if value.translation.height < -52 {
+                        let releasePoint = CGPoint(
+                            x: size.width / 2 + value.translation.width,
+                            y: size.height * 0.76 + value.translation.height
+                        )
+                        let swipe = value.translation
+                        withAnimation(.easeOut(duration: 0.10)) {
+                            preparedWood = nil
+                            throwDrag = .zero
+                        }
+                        woodThrowController.launchWood(wood, from: releasePoint, swipe: swipe)
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 3_200_000_000)
+                            if isThrowingWood { isThrowingWood = false }
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.62)) {
+                            throwDrag = .zero
+                        }
+                    }
+                }
+        )
+        .transition(.scale(scale: 0.70).combined(with: .opacity))
     }
 }
 

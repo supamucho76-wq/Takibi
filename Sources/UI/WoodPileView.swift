@@ -20,16 +20,13 @@ struct WoodPileView: View {
             // The base pile stays stable. Newly burned logs now remain as real
             // SpriteKit bodies instead of appearing here automatically.
             ForEach(0..<3, id: \.self) { index in
-                Image("WoodLog")
-                    .resizable()
-                    .scaledToFit()
+                WoodIconView(wood: wood)
                     .frame(width: 184 - CGFloat(index % 3) * 9)
                     .rotationEffect(angle(for: index))
                     .offset(offset(for: index))
                     .brightness(-0.30 + visuals.environmentLight * 0.12)
                     .saturation(0.72 + visuals.environmentLight * 0.30)
                     .shadow(color: .orange.opacity(0.13 * visuals.environmentLight), radius: 7)
-                    .colorMultiply(Color(red: wood.barkTint.red, green: wood.barkTint.green, blue: wood.barkTint.blue).opacity(0.76))
             }
 
             Circle()

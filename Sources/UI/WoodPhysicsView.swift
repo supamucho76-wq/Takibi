@@ -7,10 +7,10 @@ import UIKit
 @MainActor
 final class WoodThrowController: ObservableObject {
     fileprivate weak var scene: WoodPhysicsScene?
-    private var pendingWood: [WoodType] = []
+    private var pendingLaunches: [WoodLaunchRequest] = []
 
-    func throwWood(_ wood: WoodType) {
-        pendingWood.append(wood)
+    func launchWood(_ wood: WoodType, from releasePoint: CGPoint, swipe: CGSize) {
+        pendingLaunches.append(WoodLaunchRequest(wood: wood, releasePoint: releasePoint, swipe: swipe))
         flushIfReady()
     }
 
@@ -24,15 +24,21 @@ final class WoodThrowController: ObservableObject {
     }
 
     private func flushIfReady() {
-        guard let scene, scene.size.width > 1, scene.size.height > 1, !pendingWood.isEmpty else { return }
-        let queued = pendingWood
-        pendingWood.removeAll()
-        for (index, wood) in queued.enumerated() {
+        guard let scene, scene.size.width > 1, scene.size.height > 1, !pendingLaunches.isEmpty else { return }
+        let queued = pendingLaunches
+        pendingLaunches.removeAll()
+        for (index, request) in queued.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.16) { [weak scene] in
-                scene?.throwLog(wood)
+                scene?.launchLog(request)
             }
         }
     }
+}
+
+fileprivate struct WoodLaunchRequest {
+    let wood: WoodType
+    let releasePoint: CGPoint
+    let swipe: CGSize
 }
 
 struct WoodPhysicsView: UIViewRepresentable {
@@ -98,7 +104,7 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
     private let impactAudio = WoodImpactAudio()
     var onFirstImpact: (() -> Void)?
     private var colliders: [SKNode] = []
-    private var restingLogs: [SKSpriteNode] = []
+    private var restingLogs: [SKNode] = []
     private var lastImpactTime: TimeInterval = 0
 
     override init() {
@@ -111,27 +117,20 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
     required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func didChangeSize(_ oldSize: CGSize) { super.didChangeSize(oldSize); rebuildPileColliders() }
 
-    func throwLog(_ wood: WoodType) {
+    func launchLog(_ request: WoodLaunchRequest) {
         guard size.width > 1, size.height > 1 else { return }
-
-        let texture = SKTexture(imageNamed: "WoodLog")
-        texture.filteringMode = .linear
-        let log = SKSpriteNode(texture: texture)
+        let wood = request.wood
+        let visualSize = CGSize(width: min(size.width * 0.31, 126), height: 58)
+        let log = WoodSpriteFactory.makeNode(for: wood, size: visualSize)
         log.name = "thrown-log"
         log.userData = ["hasLanded": false]
-        log.size = CGSize(width: min(size.width * 0.34, 138), height: 60)
         log.zPosition = 100
-        log.color = UIColor(red: CGFloat(wood.barkTint.red), green: CGFloat(wood.barkTint.green), blue: CGFloat(wood.barkTint.blue), alpha: 1)
-        log.colorBlendFactor = 0.34
+        let x = min(max(request.releasePoint.x, visualSize.width * 0.55), size.width - visualSize.width * 0.55)
+        let y = min(max(size.height - request.releasePoint.y, size.height * 0.19), size.height * 0.58)
+        log.position = CGPoint(x: x, y: y)
+        log.zRotation = CGFloat.random(in: -0.20...0.20)
 
-        let startsLeft = Bool.random()
-        let startX: CGFloat = startsLeft ? -log.size.width * 0.62 : size.width + log.size.width * 0.62
-        let startY = size.height * CGFloat.random(in: 0.34...0.43)
-        log.position = CGPoint(x: startX, y: startY)
-        log.zRotation = CGFloat.random(in: -0.7...0.7)
-        log.setScale(0.80)
-
-        let body = SKPhysicsBody(rectangleOf: CGSize(width: log.size.width * 0.84, height: log.size.height * 0.44))
+        let body = SKPhysicsBody(rectangleOf: WoodSpriteFactory.physicsSize(for: wood, base: visualSize))
         body.mass = max(0.065, 0.092 * CGFloat(wood.weight))
         body.friction = 0.92
         body.restitution = CGFloat.random(in: 0.28...0.43)
@@ -142,26 +141,18 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
         body.categoryBitMask = Category.log
         body.collisionBitMask = Category.log
         body.contactTestBitMask = Category.log
-
-        let flightTime = CGFloat.random(in: 0.94...1.12)
-        let target = CGPoint(x: size.width * 0.5 + CGFloat.random(in: -52...52), y: size.height * 0.285 + 42)
-        let gravity = physicsWorld.gravity.dy
+        let upwardSpeed = min(max(-request.swipe.height * 4.4, 330), 820)
+        let horizontalSpeed = min(max(request.swipe.width * 3.2, -300), 300)
         body.velocity = CGVector(
-            dx: (target.x - startX) / flightTime,
-            dy: (target.y - startY - 0.5 * gravity * flightTime * flightTime) / flightTime
+            dx: horizontalSpeed,
+            dy: upwardSpeed
         )
-        body.angularVelocity = CGFloat.random(in: -9.5...9.5)
+        body.angularVelocity = CGFloat.random(in: -8.2...8.2) + request.swipe.width * 0.025
         log.physicsBody = body
 
         addChild(log)
         addMotionTrail(to: log, tint: wood.flameTint)
-        log.run(.scale(to: CGFloat.random(in: 0.98...1.08), duration: 0.30))
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.50) { [weak body] in
-            body?.collisionBitMask = Category.log | Category.boundary
-            body?.contactTestBitMask = Category.log | Category.boundary
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double(flightTime * 0.70)) { [weak body] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak body] in
             body?.collisionBitMask = Category.log | Category.pile | Category.boundary
             body?.contactTestBitMask = Category.log | Category.pile | Category.boundary
         }
@@ -189,7 +180,7 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
         makeImpactParticles(at: contact.contactPoint, strength: strength)
     }
 
-    private func addMotionTrail(to log: SKSpriteNode, tint: FlameTint) {
+    private func addMotionTrail(to log: SKNode, tint: FlameTint) {
         let emitter = SKEmitterNode()
         emitter.particleBirthRate = 28
         emitter.particleLifetime = 0.24

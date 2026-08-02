@@ -67,10 +67,7 @@ struct CollectionView: View {
         let count = appModel.state.woodInventory[wood.id, default: 0]
         return Button { appModel.selectWood(wood) } label: {
             collectibleShell(name: wood.name, rarity: wood.rarity, unlocked: unlocked, selected: selected, unlockSteps: wood.unlockSteps) {
-                Image("WoodLog")
-                    .resizable()
-                    .scaledToFit()
-                    .colorMultiply(Color(wood.barkTint))
+                WoodIconView(wood: wood)
                     .rotationEffect(.degrees(-9))
                     .padding(.horizontal, 10)
                     .overlay(alignment: .bottomTrailing) {
