@@ -8,6 +8,7 @@ struct FireUniforms {
     float deltaTime;
     float quality;
     float burst;
+    float4 flameTint;
 };
 
 struct QuadOut {
@@ -197,12 +198,16 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     ember *= mix(0.52, 1.0, heat);
 
     float3 flameColor = blackBodyRamp(temperature) * temperature * mix(1.02, 1.52, heat);
+    // Preserve the white-hot core while letting collectible flame styles
+    // genuinely recolor the body and halo of the flame.
+    float tintStrength = 0.74 * (1.0 - smoothstep(0.82, 1.0, temperature));
+    flameColor = mix(flameColor, flameColor * u.flameTint.rgb * 1.62, tintStrength);
     float blueBase = stagedShape
         * smoothstep(-0.025, 0.025, warpedY)
         * (1.0 - smoothstep(0.10, 0.22, warpedYN))
         * smoothstep(0.48, 0.90, heat);
     flameColor += float3(0.12, 0.28, 0.82) * blueBase * 0.36;
-    float3 haloColor = float3(1.0, 0.16, 0.008) * halo;
+    float3 haloColor = mix(float3(1.0, 0.16, 0.008), u.flameTint.rgb, 0.68) * halo;
     float3 emberColor = mix(float3(0.36, 0.006, 0.0), float3(1.0, 0.105, 0.006), ember) * ember;
 
     // Thin cool-gray smoke is most visible when only the ember bed remains.
