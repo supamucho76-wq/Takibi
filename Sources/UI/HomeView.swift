@@ -64,8 +64,8 @@ struct HomeView: View {
                         bottomControls
                     }
                     .padding(.horizontal, 12)
-                    .padding(.top, 6)
-                    .padding(.bottom, max(8, proxy.safeAreaInsets.bottom + 4))
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
 
                     if let wood = preparedWood {
                         throwableWood(wood, in: proxy.size)
@@ -84,7 +84,6 @@ struct HomeView: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
             }
-            .ignoresSafeArea()
         }
         .sheet(isPresented: $settingsPresented) {
             SettingsView().environmentObject(appModel)
@@ -241,9 +240,13 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(appModel.fireStatus.message)
                                 .font(.subheadline.bold())
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
                             Text("火はあと\(durationText(appModel.fireStatus.remainingDuration))燃えます")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.72))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
                         }
                         Spacer(minLength: 8)
                         Image(systemName: "chevron.up.circle.fill")
@@ -255,6 +258,8 @@ struct HomeView: View {
                             .foregroundStyle(.orange)
                         Text("次の\(appModel.nextStepRewardTarget.kind.title)まであと\(appModel.nextStepRewardTarget.remainingSteps)歩")
                             .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
                         Spacer()
                     }
 
@@ -276,6 +281,8 @@ struct HomeView: View {
                 Button { walkPresented = true } label: {
                     Label("散歩を開始", systemImage: "figure.walk.motion")
                         .font(.subheadline.bold())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.18), lineWidth: 1))
@@ -290,9 +297,12 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text("火にくべる")
                                 .font(.subheadline.bold())
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
                             Text("所持 \(appModel.selectedWoodCount)本")
                                 .font(.caption2)
                                 .foregroundStyle(.white.opacity(0.72))
+                                .lineLimit(1)
                         }
                     }
                     .frame(maxWidth: .infinity, minHeight: 58)
@@ -308,6 +318,7 @@ struct HomeView: View {
                 .accessibilityLabel("\(appModel.selectedWood.name)を火にくべる。所持\(appModel.selectedWoodCount)本")
             }
             .frame(maxWidth: 370)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
