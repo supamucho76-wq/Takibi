@@ -53,6 +53,12 @@ workflows:
       - name: Install XcodeGen
         script: |
           brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Set automatic build number
+        script: |
+          BUILD_VERSION=$((PROJECT_BUILD_NUMBER + 100))
+          /usr/bin/sed -i '' -E "s/CURRENT_PROJECT_VERSION: [0-9]+/CURRENT_PROJECT_VERSION: ${BUILD_VERSION}/" project.yml
+          echo "Using iOS build number ${BUILD_VERSION}"
+          grep CURRENT_PROJECT_VERSION project.yml
       - name: Generate project
         script: xcodegen generate
       - name: Install Metal Toolchain
