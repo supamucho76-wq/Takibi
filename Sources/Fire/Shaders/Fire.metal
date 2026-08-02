@@ -97,8 +97,8 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
 
     // Keep the flame comfortably inside the phone while still allowing a short
     // ignition jump when a new log lands.
-    float targetHeight = mix(0.038, 0.355, pow(heat, 0.78));
-    targetHeight *= 1.0 + u.burst * 0.065;
+    float targetHeight = mix(0.034, 0.315, pow(heat, 0.82));
+    targetHeight *= 1.0 + u.burst * 0.055;
     float y = p.y / max(targetHeight, 0.001);
     float turbulence = smoothstep(-0.05, 1.0, y);
 
@@ -123,7 +123,7 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float warpedY = p.y + warpA.y * 0.018 + warpB.y * 0.011;
     float warpedYN = warpedY / max(targetHeight, 0.001);
 
-    float baseWidth = mix(0.021, 0.082, pow(heat, 0.82)) * (1.0 + u.burst * 0.055);
+    float baseWidth = mix(0.018, 0.068, pow(heat, 0.86)) * (1.0 + u.burst * 0.045);
     float taper = mix(1.10, 0.085, smoothstep(-0.05, 1.02, warpedYN));
     float width = max(0.009, baseWidth * taper);
     float verticalMask = smoothstep(-0.055, 0.015, warpedY)
@@ -169,26 +169,30 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float breakupThreshold = mix(0.24, 0.72, smoothstep(0.25, 1.0, warpedYN));
     float breakup = smoothstep(breakupThreshold - 0.20, breakupThreshold + 0.14, detail * 0.78 + fine * 0.22);
     float coherentBase = 1.0 - smoothstep(0.18, 0.82, warpedYN);
-    float flameMask = stagedShape * max(coherentBase * 0.68, breakup);
+    float flameMask = stagedShape * max(coherentBase * 0.62, breakup);
+    // Sharpen the translucent noise field into thin, readable flame tongues.
+    // This keeps the fire from looking like a single blurred orange cloud.
+    flameMask = pow(clamp(flameMask, 0.0, 1.0), 1.26);
 
     float flamePresence = smoothstep(0.095, 0.235, heat);
     float temperature = clamp(
-        flameMask * flamePresence * (0.62 + detail * 0.32) * slowFlicker * (1.0 + u.burst * 0.12),
+        flameMask * flamePresence * (0.58 + detail * 0.34) * slowFlicker * (1.0 + u.burst * 0.10),
         0.0,
         1.0
     );
+    temperature = pow(temperature, 1.08);
     temperature *= mix(0.86, 1.17, 1.0 - smoothstep(0.0, 0.64, warpedYN));
 
     // A wider analytic halo is the deliberately cheap single-pass bloom approximation.
-    float haloWidth = width * 1.72 + 0.010;
+    float haloWidth = width * 1.42 + 0.008;
     float halo = max(
         exp(-pow(abs(warpedX) / haloWidth, 1.45)),
-        stagedShape * 0.52
+        stagedShape * 0.40
     )
         * verticalMask
         * (1.0 - smoothstep(0.62, 1.05, warpedYN))
         * flamePresence;
-    halo *= 0.055 + 0.075 * heat;
+    halo *= 0.030 + 0.052 * heat;
 
     // The ember bed is independent from flamePresence and therefore never disappears.
     float emberBreath = 0.77 + 0.23 * sin(u.time * 1.16 + fbm4(float2(u.time * 0.08, 3.0)) * 2.1);
@@ -197,7 +201,7 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float ember = exp(-dot(emberP, emberP) * 1.38) * emberBreath * emberNoise;
     ember *= mix(0.52, 1.0, heat);
 
-    float3 flameColor = blackBodyRamp(temperature) * temperature * mix(0.84, 1.10, heat);
+    float3 flameColor = blackBodyRamp(temperature) * temperature * mix(0.78, 0.98, heat);
     // Preserve the white-hot core while letting collectible flame styles
     // genuinely recolor the body and halo of the flame.
     float tintStrength = 0.74 * (1.0 - smoothstep(0.82, 1.0, temperature));
@@ -217,7 +221,7 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float smoke = smokeY * smokeColumn * smoothstep(0.42, 0.72, smokeCurl) * mix(0.11, 0.025, heat);
 
     float3 color = flameColor + haloColor + emberColor + float3(0.21, 0.23, 0.25) * smoke;
-    float alpha = clamp(temperature * 0.84 + halo * 0.15 + ember * 0.84 + smoke * 0.34, 0.0, 1.0);
+    float alpha = clamp(temperature * 0.78 + halo * 0.10 + ember * 0.82 + smoke * 0.32, 0.0, 1.0);
     return float4(color, alpha);
 }
 
