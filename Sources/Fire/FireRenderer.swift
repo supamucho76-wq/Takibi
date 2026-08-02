@@ -176,7 +176,7 @@ final class FireRenderer: NSObject, MTKViewDelegate {
         }
         particles.removeAll { $0.age >= $0.lifetime || $0.position.y > 1.08 }
 
-        let rate = (1.5 + 58 * pow(normalized, 1.45)) * qualityScale
+        let rate = (1.2 + 42 * pow(normalized, 1.48)) * qualityScale
         spawnAccumulator += rate * deltaTime
         while spawnAccumulator >= 1 {
             spawnParticle(heat: normalized, burst: false)
