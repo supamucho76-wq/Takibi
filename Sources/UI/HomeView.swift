@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var fireBurstSequence = 0
     @State private var isThrowingWood = false
     @State private var showBurnConfirmation = false
+    @State private var burnConfirmationText = "薪を1本くべた"
     @State private var showWoodReward = false
     @State private var rewardedWoodCount = 0
     @State private var showUnlockReward = false
@@ -27,12 +28,16 @@ struct HomeView: View {
                         background(time: time)
                         environmentLight(flicker: flicker)
 
-                        WoodPileView(heat: appModel.state.heat, burnSequence: fireBurstSequence, wood: appModel.selectedWood)
+                        WoodPileView(
+                            heat: appModel.visualHeat,
+                            burnSequence: fireBurstSequence,
+                            burningFuels: appModel.activeBurningFuels
+                        )
                             .frame(width: min(proxy.size.width * 0.66, 310), height: 150)
                             .position(x: proxy.size.width / 2, y: proxy.size.height * 0.71)
 
                         FireView(
-                            heat: appModel.state.heat,
+                            heat: appModel.visualHeat,
                             isActive: appModel.isRenderingActive,
                             burnSequence: fireBurstSequence,
                             tint: appModel.selectedFlame.tint
@@ -151,7 +156,7 @@ struct HomeView: View {
                 }
 
                 if showBurnConfirmation {
-                    Label("薪を1本くべた", systemImage: "checkmark.circle.fill")
+                    Label(burnConfirmationText, systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
@@ -207,7 +212,7 @@ struct HomeView: View {
             hudMetric(
                 icon: "square.stack.3d.up.fill",
                 value: "\(appModel.totalWoodCount)本",
-                label: "全ての薪"
+                label: "手持ち・燃焼\(appModel.activeBurningFuelCount)本"
             )
 
             Spacer(minLength: 8)
@@ -248,22 +253,59 @@ struct HomeView: View {
     }
 
     private var fireStatus: some View {
-        HStack(spacing: 8) {
-            Image(systemName: appModel.visualState.stage.systemImage)
-                .foregroundStyle(appModel.visualState.stage.tint)
-            Text("\(appModel.visualState.stage.title)・\(appModel.selectedFlame.name)")
-                .fontWeight(.semibold)
-            Spacer(minLength: 10)
-            Text(fireTimeLabel)
-                .monospacedDigit()
+        let now = Date()
+        return VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: appModel.visualState.stage.systemImage)
+                    .foregroundStyle(appModel.visualState.stage.tint)
+                Text("\(appModel.visualState.stage.title)・\(appModel.selectedFlame.name)")
+                    .fontWeight(.semibold)
+                Spacer(minLength: 8)
+                Label("\(appModel.activeBurningFuelCount)本燃焼中", systemImage: "timelapse")
+                    .foregroundStyle(.orange.opacity(0.94))
+            }
+
+            if let nextFuel = appModel.nextBurningFuel {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.10))
+                        Capsule()
+                            .fill(LinearGradient(colors: [.red, .orange, .yellow], startPoint: .leading, endPoint: .trailing))
+                            .frame(
+                                width: max(
+                                    4,
+                                    proxy.size.width * CGFloat(nextFuel.remainingFraction(at: now))
+                                )
+                            )
+                    }
+                }
+                .frame(height: 4)
+
+                HStack(spacing: 6) {
+                    Text(nextFuelLabel(nextFuel, now: now))
+                    Spacer(minLength: 6)
+                    Text(queueEndLabel(now: now))
+                }
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.68))
+                .monospacedDigit()
+            } else {
+                Text("炉内の燃料は燃え尽きました。歩いて次の火種を作ろう")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.orange.opacity(0.84))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .font(.caption)
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
-        .frame(maxWidth: 290, minHeight: 38)
-        .background(.black.opacity(0.52), in: Capsule())
-        .overlay(Capsule().stroke(.orange.opacity(0.20), lineWidth: 1))
+        .padding(.vertical, 9)
+        .frame(maxWidth: 340, minHeight: 58)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(.orange.opacity(0.24), lineWidth: 1)
+        )
         .contentTransition(.numericText())
     }
 
@@ -280,7 +322,7 @@ struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 5) {
-                    Text(appModel.totalWoodCount == 0 ? "火を守るため、あと\(stepsUntilNextWood)歩" : "次の薪まで、あと\(stepsUntilNextWood)歩")
+                    Text(walkingMissionTitle)
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
@@ -339,7 +381,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(preparedWood == nil ? "\(appModel.selectedWood.name)を持つ" : "薪を上へスワイプ")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
-                    Text(appModel.selectedWoodCount > 0 ? "手元に出してから投げます" : "この燃料はありません")
+                    Text(appModel.selectedWoodCount > 0 ? "手元に出してから投げます" : "選択モードを保持中・在庫0")
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.70))
                 }
@@ -415,11 +457,36 @@ struct HomeView: View {
         MotivationEngine.estimatedWalkingMinutes(for: stepsUntilNextWood)
     }
 
-    private var fireTimeLabel: String {
-        let hours = MotivationEngine.hoursUntilFlameWeakens(heat: appModel.state.heat)
-        if hours <= 0.5 { return "薪を待っている" }
-        if hours < 24 { return "弱まるまで約\(max(1, Int(hours.rounded())))時間" }
-        return "弱まるまで約\(max(1, Int((hours / 24).rounded())))日"
+    private var walkingMissionTitle: String {
+        if appModel.activeBurningFuelCount == 0 {
+            return "火を復活させるまで、あと\(stepsUntilNextWood)歩"
+        }
+        if let end = appModel.fireQueueEndsAt,
+           end.timeIntervalSinceNow < 4 * 60 * 60 {
+            return "火を絶やさないため、あと\(stepsUntilNextWood)歩"
+        }
+        return "次の薪まで、あと\(stepsUntilNextWood)歩"
+    }
+
+    private func nextFuelLabel(_ fuel: BurningFuel, now: Date) -> String {
+        let wood = WoodCatalog.wood(id: fuel.woodID) ?? WoodCatalog.standard
+        return "次の\(wood.name)：あと\(compactDuration(fuel.expiresAt.timeIntervalSince(now)))"
+    }
+
+    private func queueEndLabel(now: Date) -> String {
+        guard let end = appModel.fireQueueEndsAt else { return "火守り 0分" }
+        return "火守り \(compactDuration(end.timeIntervalSince(now)))"
+    }
+
+    private func compactDuration(_ interval: TimeInterval) -> String {
+        let minutes = max(0, Int(interval / 60))
+        if minutes < 60 { return "\(max(1, minutes))分" }
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        if hours < 24 { return remainingMinutes > 0 ? "\(hours)時間\(remainingMinutes)分" : "\(hours)時間" }
+        let days = hours / 24
+        let remainingHours = hours % 24
+        return remainingHours > 0 ? "\(days)日\(remainingHours)時間" : "\(days)日"
     }
 
     private func burnWood() {
@@ -449,9 +516,10 @@ struct HomeView: View {
         guard isThrowingWood else { return }
         isThrowingWood = false
 
-        guard appModel.burnSelectedWood() != nil else { return }
+        guard let burnedWood = appModel.burnSelectedWood() else { return }
         feedbackTrigger += 1
         fireBurstSequence += 1
+        burnConfirmationText = "\(burnedWood.name)を投入・燃焼\(appModel.activeBurningFuelCount)本"
 
         withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
             showBurnConfirmation = true

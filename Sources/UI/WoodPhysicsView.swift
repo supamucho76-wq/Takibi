@@ -169,6 +169,9 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
         if categories & Category.pile != 0, logNode?.userData?["hasLanded"] as? Bool != true {
             logNode?.userData?["hasLanded"] = true
             onFirstImpact?()
+            if let logNode {
+                settleIntoPersistentPile(logNode)
+            }
         }
 
         let now = CACurrentMediaTime()
@@ -178,6 +181,21 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
         UIImpactFeedbackGenerator(style: strength > 0.58 ? .rigid : .light).impactOccurred(intensity: strength)
         impactAudio.play(intensity: Float(strength))
         makeImpactParticles(at: contact.contactPoint, strength: strength)
+    }
+
+    private func settleIntoPersistentPile(_ log: SKNode) {
+        let settle = SKAction.sequence([
+            .wait(forDuration: 0.75),
+            .group([
+                .fadeOut(withDuration: 0.38),
+                .scale(to: 0.94, duration: 0.38),
+            ]),
+            .removeFromParent(),
+        ])
+        log.run(settle) { [weak self, weak log] in
+            guard let self, let log else { return }
+            self.restingLogs.removeAll { $0 === log }
+        }
     }
 
     private func addMotionTrail(to log: SKNode, tint: FlameTint) {

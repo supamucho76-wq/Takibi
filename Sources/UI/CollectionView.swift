@@ -24,7 +24,7 @@ struct CollectionView: View {
                 .padding(.horizontal)
 
                 HStack {
-                    Text("累計 (appModel.state.totalStepsAllTime.formatted()) 歩")
+                    Text("累計 \(appModel.state.totalStepsAllTime.formatted())歩")
                     Spacer()
                     Text(unlockSummary)
                 }
@@ -55,9 +55,9 @@ struct CollectionView: View {
 
     private var unlockSummary: String {
         switch section {
-        case .wood: "解放 (appModel.state.unlockedWoodIDs.count)/10"
-        case .flame: "解放 (appModel.state.unlockedFlameIDs.count)/10"
-        case .background: "解放 (appModel.state.unlockedBackgroundIDs.count)/10"
+        case .wood: "解放 \(appModel.state.unlockedWoodIDs.count)/10"
+        case .flame: "解放 \(appModel.state.unlockedFlameIDs.count)/10"
+        case .background: "解放 \(appModel.state.unlockedBackgroundIDs.count)/10"
         }
     }
 
@@ -76,7 +76,7 @@ struct CollectionView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(!unlocked || count == 0)
+        .disabled(!unlocked)
     }
 
     private func flameCard(_ flame: FlameStyle) -> some View {

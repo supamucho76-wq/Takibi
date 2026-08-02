@@ -3,61 +3,121 @@ import SwiftUI
 struct WoodPileView: View {
     let heat: Double
     let burnSequence: Int
-    let wood: WoodType
+    let burningFuels: [BurningFuel]
 
     @State private var arrivalGlow: Double = 0
 
-    private var visuals: FireVisualState { FireVisualState(heat: heat) }
+    private var visuals: FireVisualState {
+        FireVisualState(heat: heat)
+    }
+
+    private var visibleFuels: [BurningFuel] {
+        Array(burningFuels.suffix(8))
+    }
+
+    private var overflowCount: Int {
+        max(0, burningFuels.count - visibleFuels.count)
+    }
 
     var body: some View {
         ZStack {
             Ellipse()
-                .fill(Color.black.opacity(0.72))
-                .frame(width: 230, height: 46)
+                .fill(Color.black.opacity(0.74))
+                .frame(width: 238, height: 48)
                 .blur(radius: 12)
                 .offset(y: 34)
 
-            // The base pile stays stable. Newly burned logs now remain as real
-            // SpriteKit bodies instead of appearing here automatically.
-            ForEach(0..<3, id: \.self) { index in
-                WoodIconView(wood: wood)
-                    .frame(width: 184 - CGFloat(index % 3) * 9)
-                    .rotationEffect(angle(for: index))
-                    .offset(offset(for: index))
-                    .brightness(-0.30 + visuals.environmentLight * 0.12)
-                    .saturation(0.72 + visuals.environmentLight * 0.30)
-                    .shadow(color: .orange.opacity(0.13 * visuals.environmentLight), radius: 7)
+            emberBed
+
+            ForEach(visibleFuels) { fuel in
+                fuelView(fuel)
+                    .transition(
+                        .asymmetric(
+                            insertion: .scale(scale: 1.22)
+                                .combined(with: .move(edge: .top))
+                                .combined(with: .opacity),
+                            removal: .scale(scale: 0.62).combined(with: .opacity)
+                        )
+                    )
+            }
+
+            if overflowCount > 0 {
+                Text("+\(overflowCount)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.68), in: Capsule())
+                    .offset(x: 92, y: -31)
             }
 
             Circle()
-                .fill(.orange.opacity(arrivalGlow * 0.34))
-                .frame(width: 170, height: 80)
-                .blur(radius: 24)
+                .fill(.orange.opacity(arrivalGlow * 0.36))
+                .frame(width: 176, height: 84)
+                .blur(radius: 25)
                 .blendMode(.plusLighter)
         }
+        .animation(.spring(response: 0.48, dampingFraction: 0.76), value: burningFuels)
         .onChange(of: burnSequence) { _, _ in
             arrivalGlow = 1
-            withAnimation(.easeOut(duration: 0.72)) {
+            withAnimation(.easeOut(duration: 0.78)) {
                 arrivalGlow = 0
             }
         }
     }
 
-    private func angle(for index: Int) -> Angle {
-        let angles: [Double] = [-16, 17, -5, 28, -30, 7]
-        return .degrees(angles[index % angles.count])
+    private var emberBed: some View {
+        ZStack {
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.orange.opacity(0.32 * visuals.brightness),
+                            Color.red.opacity(0.18 * visuals.brightness),
+                            .black.opacity(0.72),
+                        ],
+                        center: .center,
+                        startRadius: 2,
+                        endRadius: 74
+                    )
+                )
+                .frame(width: 168, height: 42)
+                .blur(radius: 4)
+
+            ForEach(0 ..< 6, id: \.self) { index in
+                Circle()
+                    .fill(index.isMultiple(of: 2) ? Color.red.opacity(0.58) : Color.orange.opacity(0.62))
+                    .frame(width: 8 + CGFloat(index % 3) * 3)
+                    .offset(
+                        x: CGFloat(index - 3) * 19,
+                        y: CGFloat((index * 7) % 13) - 6
+                    )
+                    .blur(radius: 1.5)
+            }
+        }
+        .offset(y: 24)
     }
 
-    private func offset(for index: Int) -> CGSize {
-        let offsets: [CGSize] = [
-            CGSize(width: -12, height: 15),
-            CGSize(width: 12, height: 10),
-            CGSize(width: 0, height: -2),
-            CGSize(width: 5, height: -14),
-            CGSize(width: -8, height: -24),
-            CGSize(width: 3, height: -34)
-        ]
-        return offsets[index % offsets.count]
+    private func fuelView(_ fuel: BurningFuel) -> some View {
+        let wood = WoodCatalog.wood(id: fuel.woodID) ?? WoodCatalog.standard
+        let remaining = fuel.remainingFraction(at: Date())
+        return WoodIconView(wood: wood)
+            .frame(
+                width: 174 * fuel.placement.scale,
+                height: 80 * fuel.placement.scale
+            )
+            .rotationEffect(.degrees(fuel.placement.rotationDegrees))
+            .offset(
+                x: fuel.placement.horizontal * 108,
+                y: fuel.placement.vertical * 64
+            )
+            .brightness(-0.34 + visuals.environmentLight * 0.13 - (1 - remaining) * 0.10)
+            .saturation(0.58 + remaining * 0.36 + visuals.environmentLight * 0.18)
+            .opacity(0.72 + remaining * 0.28)
+            .shadow(
+                color: Color(wood.flameTint).opacity(0.12 + visuals.environmentLight * 0.10),
+                radius: 7
+            )
+            .id(fuel.id)
     }
 }
-
