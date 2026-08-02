@@ -40,11 +40,13 @@ final class PedometerService {
                 if let error {
                     continuation.resume(throwing: error)
                 } else if let data {
-                    continuation.resume(returning: PedometerSample(
-                        steps: data.numberOfSteps.intValue,
-                        startDate: data.startDate,
-                        endDate: data.endDate
-                    ))
+                    continuation.resume(
+                        returning: PedometerSample(
+                            steps: data.numberOfSteps.intValue,
+                            startDate: data.startDate,
+                            endDate: data.endDate
+                        )
+                    )
                 } else {
                     continuation.resume(throwing: PedometerError.missingData)
                 }
@@ -61,11 +63,15 @@ final class PedometerService {
             if let error {
                 handler(.failure(error))
             } else if let data {
-                handler(.success(PedometerSample(
-                    steps: data.numberOfSteps.intValue,
-                    startDate: data.startDate,
-                    endDate: data.endDate
-                )))
+                handler(
+                    .success(
+                        PedometerSample(
+                            steps: data.numberOfSteps.intValue,
+                            startDate: data.startDate,
+                            endDate: data.endDate
+                        )
+                    )
+                )
             }
         }
     }
@@ -81,9 +87,8 @@ enum PedometerError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "この端末では歩数を取得できません。"
-        case .missingData: return "歩数データを読み込めませんでした。"
+        case .unavailable: "この端末では歩数を取得できません。"
+        case .missingData: "歩数データを読み込めませんでした。"
         }
     }
 }
-
