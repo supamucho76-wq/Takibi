@@ -33,7 +33,31 @@ final class AppModel: ObservableObject {
     }
 
     var visualState: FireVisualState {
-        FireVisualState(heat: state.heat)
+        FireVisualState(heat: visualHeat)
+    }
+
+    var visualHeat: Double {
+        BurningFuelEngine.visualHeat(
+            storedHeat: state.heat,
+            fuels: state.burningFuels,
+            at: Date()
+        )
+    }
+
+    var activeBurningFuels: [BurningFuel] {
+        BurningFuelEngine.active(state.burningFuels, at: Date())
+    }
+
+    var activeBurningFuelCount: Int {
+        activeBurningFuels.count
+    }
+
+    var nextBurningFuel: BurningFuel? {
+        activeBurningFuels.first
+    }
+
+    var fireQueueEndsAt: Date? {
+        activeBurningFuels.last?.expiresAt
     }
 
     var standardWoodCount: Int {
@@ -79,6 +103,7 @@ final class AppModel: ObservableObject {
 
         state.woodInventory[wood.id] = count - 1
         state.heat = HeatEngine.adding(wood.heatValue, to: state.heat)
+        state.burningFuels = BurningFuelEngine.adding(wood, to: state.burningFuels, at: now)
         state.heatUpdatedAt = now
         scheduleSave()
         return true
@@ -93,16 +118,14 @@ final class AppModel: ObservableObject {
 
         state.woodInventory[wood.id] = count - 1
         state.heat = HeatEngine.adding(wood.heatValue, to: state.heat)
+        state.burningFuels = BurningFuelEngine.adding(wood, to: state.burningFuels, at: now)
         state.heatUpdatedAt = now
-        if count == 1, wood.id != WoodCatalog.standard.id {
-            state.selectedWoodID = WoodCatalog.standard.id
-        }
         scheduleSave()
         return wood
     }
 
     func selectWood(_ wood: WoodType) {
-        guard state.unlockedWoodIDs.contains(wood.id), state.woodInventory[wood.id, default: 0] > 0 else { return }
+        guard state.unlockedWoodIDs.contains(wood.id) else { return }
         state.selectedWoodID = wood.id
         scheduleSave()
     }
@@ -180,6 +203,7 @@ final class AppModel: ObservableObject {
             updatedAt: state.heatUpdatedAt,
             now: now
         )
+        state.burningFuels = BurningFuelEngine.active(state.burningFuels, at: now)
         state.heatUpdatedAt = now
         scheduleSave()
     }
