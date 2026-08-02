@@ -141,7 +141,7 @@ struct CollectionView: View {
             .frame(height: 104)
 
             Text(name).font(.caption.weight(.bold)).lineLimit(1)
-            Text(selected ? "使用中" : rarity.title)
+            Text(selected ? "選択中 ✓" : rarity.title)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(selected ? Color.orange : rarity.color)
         }
