@@ -27,6 +27,7 @@ actor GameStateStore {
                 updatedAt: state.heatUpdatedAt,
                 now: now
             )
+            state.burningFuels = BurningFuelEngine.active(state.burningFuels, at: now)
             state.heatUpdatedAt = now
             return state
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {

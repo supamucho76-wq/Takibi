@@ -5,6 +5,7 @@ struct GameState: Codable, Equatable {
     var heatUpdatedAt: Date
     var lastPedometerProcessedAt: Date
     var woodInventory: [String: Int]
+    var burningFuels: [BurningFuel]
     var totalStepsAllTime: Int
     var firstLaunchedAt: Date
     var onboardingCompleted: Bool
@@ -20,6 +21,7 @@ struct GameState: Codable, Equatable {
         case heatUpdatedAt
         case lastPedometerProcessedAt
         case woodInventory
+        case burningFuels
         case totalStepsAllTime
         case firstLaunchedAt
         case onboardingCompleted
@@ -36,6 +38,7 @@ struct GameState: Codable, Equatable {
         heatUpdatedAt: Date,
         lastPedometerProcessedAt: Date,
         woodInventory: [String: Int],
+        burningFuels: [BurningFuel] = [],
         totalStepsAllTime: Int,
         firstLaunchedAt: Date,
         onboardingCompleted: Bool,
@@ -50,6 +53,7 @@ struct GameState: Codable, Equatable {
         self.heatUpdatedAt = heatUpdatedAt
         self.lastPedometerProcessedAt = lastPedometerProcessedAt
         self.woodInventory = woodInventory
+        self.burningFuels = burningFuels
         self.totalStepsAllTime = totalStepsAllTime
         self.firstLaunchedAt = firstLaunchedAt
         self.onboardingCompleted = onboardingCompleted
@@ -69,6 +73,8 @@ struct GameState: Codable, Equatable {
         lastPedometerProcessedAt = try container.decodeIfPresent(Date.self, forKey: .lastPedometerProcessedAt) ?? fallbackDate
         woodInventory = try container.decodeIfPresent([String: Int].self, forKey: .woodInventory)
             ?? [WoodCatalog.standard.id: GameConstants.starterWoodCount]
+        burningFuels = try container.decodeIfPresent([BurningFuel].self, forKey: .burningFuels)
+            ?? BurningFuelEngine.migratedQueue(heat: heat, at: heatUpdatedAt)
         totalStepsAllTime = try container.decodeIfPresent(Int.self, forKey: .totalStepsAllTime) ?? 0
         firstLaunchedAt = try container.decodeIfPresent(Date.self, forKey: .firstLaunchedAt) ?? fallbackDate
         onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? false
@@ -89,6 +95,7 @@ struct GameState: Codable, Equatable {
             heatUpdatedAt: date,
             lastPedometerProcessedAt: date,
             woodInventory: [WoodCatalog.standard.id: GameConstants.starterWoodCount],
+            burningFuels: BurningFuelEngine.starterQueue(at: date),
             totalStepsAllTime: 0,
             firstLaunchedAt: date,
             onboardingCompleted: false
