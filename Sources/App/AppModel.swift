@@ -12,6 +12,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRenderingActive = true
     @Published private(set) var woodAwardSequence = 0
     @Published private(set) var lastAwardedWoodCount = 0
+    @Published private(set) var unlockSequence = 0
+    @Published private(set) var lastUnlockedReward: CollectibleReward?
 
     private let store: GameStateStore
     private let pedometer: PedometerService
@@ -38,6 +40,30 @@ final class AppModel: ObservableObject {
         state.standardWoodCount
     }
 
+    var totalWoodCount: Int {
+        state.woodInventory.values.reduce(0, +)
+    }
+
+    var selectedWood: WoodType {
+        WoodCatalog.wood(id: state.selectedWoodID) ?? WoodCatalog.standard
+    }
+
+    var selectedWoodCount: Int {
+        state.woodInventory[selectedWood.id, default: 0]
+    }
+
+    var selectedFlame: FlameStyle {
+        FlameCatalog.style(id: state.selectedFlameID) ?? FlameCatalog.natural
+    }
+
+    var selectedBackground: BackgroundTheme {
+        BackgroundCatalog.theme(id: state.selectedBackgroundID) ?? BackgroundCatalog.quietForest
+    }
+
+    var nextCollectibleReward: CollectibleReward? {
+        ProgressionCatalog.nextReward(after: state.totalStepsAllTime)
+    }
+
     func completeOnboarding() {
         state.onboardingCompleted = true
         scheduleSave()
@@ -56,6 +82,41 @@ final class AppModel: ObservableObject {
         state.heatUpdatedAt = now
         scheduleSave()
         return true
+    }
+
+    @discardableResult
+    func burnSelectedWood(now: Date = Date()) -> WoodType? {
+        applyDecay(now: now)
+        let wood = selectedWood
+        let count = state.woodInventory[wood.id, default: 0]
+        guard count > 0 else { return nil }
+
+        state.woodInventory[wood.id] = count - 1
+        state.heat = HeatEngine.adding(wood.heatValue, to: state.heat)
+        state.heatUpdatedAt = now
+        if count == 1, wood.id != WoodCatalog.standard.id {
+            state.selectedWoodID = WoodCatalog.standard.id
+        }
+        scheduleSave()
+        return wood
+    }
+
+    func selectWood(_ wood: WoodType) {
+        guard state.unlockedWoodIDs.contains(wood.id), state.woodInventory[wood.id, default: 0] > 0 else { return }
+        state.selectedWoodID = wood.id
+        scheduleSave()
+    }
+
+    func selectFlame(_ flame: FlameStyle) {
+        guard state.unlockedFlameIDs.contains(flame.id) else { return }
+        state.selectedFlameID = flame.id
+        scheduleSave()
+    }
+
+    func selectBackground(_ background: BackgroundTheme) {
+        guard state.unlockedBackgroundIDs.contains(background.id) else { return }
+        state.selectedBackgroundID = background.id
+        scheduleSave()
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
@@ -95,6 +156,8 @@ final class AppModel: ObservableObject {
             liveCommittedSteps = 0
             woodAwardSequence = 0
             lastAwardedWoodCount = 0
+            unlockSequence = 0
+            lastUnlockedReward = nil
             pedometerMessage = nil
             motionPermission = pedometer.permissionState
         }
@@ -199,18 +262,60 @@ final class AppModel: ObservableObject {
     }
 
     private func applySteps(_ steps: Int, processedAt: Date) {
+        let previousSteps = state.totalStepsAllTime
         let result = StepConversion.convert(
             newSteps: steps,
             previousTotal: state.totalStepsAllTime
         )
         state.totalStepsAllTime = result.newTotalSteps
         if result.awardedWood > 0 {
-            state.woodInventory[WoodCatalog.standard.id, default: 0] += result.awardedWood
+            awardWalkingWood(from: previousSteps, to: result.newTotalSteps)
             lastAwardedWoodCount = result.awardedWood
             woodAwardSequence += 1
         }
+        let unlocked = ProgressionCatalog.newlyUnlocked(from: previousSteps, to: result.newTotalSteps)
+        for reward in unlocked {
+            unlock(reward)
+        }
+        if let newest = unlocked.last {
+            lastUnlockedReward = newest
+            unlockSequence += 1
+        }
         state.lastPedometerProcessedAt = max(state.lastPedometerProcessedAt, processedAt)
         scheduleSave()
+    }
+
+    private func awardWalkingWood(from oldSteps: Int, to newSteps: Int) {
+        let rate = GameConstants.stepsPerWood
+        guard rate > 0 else { return }
+        let firstBoundary = max(1, oldSteps / rate + 1)
+        let lastBoundary = newSteps / rate
+        guard firstBoundary <= lastBoundary else { return }
+
+        for block in firstBoundary...lastBoundary {
+            let boundarySteps = block * rate
+            let rarePool = WoodCatalog.all.dropFirst().filter { $0.unlockSteps <= boundarySteps }
+            if block.isMultiple(of: 5), !rarePool.isEmpty {
+                let index = ((block / 5) - 1) % rarePool.count
+                state.woodInventory[rarePool[index].id, default: 0] += 1
+            } else {
+                state.woodInventory[WoodCatalog.standard.id, default: 0] += 1
+            }
+        }
+    }
+
+    private func unlock(_ reward: CollectibleReward) {
+        let parts = reward.id.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return }
+        switch reward.kind {
+        case .wood:
+            state.unlockedWoodIDs.insert(parts[1])
+            state.woodInventory[parts[1], default: 0] += 1
+        case .flame:
+            state.unlockedFlameIDs.insert(parts[1])
+        case .background:
+            state.unlockedBackgroundIDs.insert(parts[1])
+        }
     }
 
     private func scheduleSave() {
