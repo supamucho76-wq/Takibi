@@ -10,6 +10,7 @@ struct FireUniforms {
     var deltaTime: Float
     var quality: Float
     var burst: Float
+    var flameTint: SIMD4<Float>
 }
 
 struct SparkVertex {
@@ -29,6 +30,7 @@ private struct SparkParticle {
 final class FireRenderer: NSObject, MTKViewDelegate {
     var heat: Float = Float(GameConstants.initialHeat)
     var isActive = true
+    var flameTint = SIMD4<Float>(1, 0.48, 0.12, 1)
 
     private let logger = Logger(subsystem: "com.example.Takibi", category: "FireRenderer")
     private let device: MTLDevice
@@ -109,7 +111,8 @@ final class FireRenderer: NSObject, MTKViewDelegate {
             heat: min(max(displayedHeat, 0), 100),
             deltaTime: Float(delta),
             quality: qualityScale,
-            burst: burstEnergy
+            burst: burstEnergy,
+            flameTint: flameTint
         )
 
         guard

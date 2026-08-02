@@ -5,6 +5,7 @@ struct FireView: UIViewRepresentable {
     let heat: Double
     let isActive: Bool
     let burnSequence: Int
+    let tint: FlameTint
 
     final class Coordinator {
         var renderer: FireRenderer?
@@ -33,6 +34,7 @@ struct FireView: UIViewRepresentable {
 
         let renderer = FireRenderer(view: view)
         renderer.heat = Float(heat)
+        renderer.flameTint = SIMD4(Float(tint.red), Float(tint.green), Float(tint.blue), 1)
         renderer.isActive = isActive
         context.coordinator.renderer = renderer
         context.coordinator.lastBurnSequence = burnSequence
@@ -42,6 +44,7 @@ struct FireView: UIViewRepresentable {
 
     func updateUIView(_ view: MTKView, context: Context) {
         context.coordinator.renderer?.heat = Float(heat)
+        context.coordinator.renderer?.flameTint = SIMD4(Float(tint.red), Float(tint.green), Float(tint.blue), 1)
         context.coordinator.renderer?.isActive = isActive
         if burnSequence != context.coordinator.lastBurnSequence {
             context.coordinator.renderer?.triggerWoodBurst()
