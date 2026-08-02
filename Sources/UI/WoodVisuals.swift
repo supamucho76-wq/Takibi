@@ -113,13 +113,35 @@ enum WoodSpriteFactory {
         case .nutShells:
             addCircle(size.height*0.26,CGPoint(x:-size.width*0.22,y:-3),bark); addCircle(size.height*0.29,CGPoint(x:0,y:4),bark.withAlphaComponent(0.92)); addCircle(size.height*0.23,CGPoint(x:size.width*0.22,y:-5),bark)
         case .twistedRoot:
-            for i in -1...1 { let p=CGMutablePath();p.move(to:CGPoint(x:-size.width*0.43,y:CGFloat(i)*8));p.addCurve(to:CGPoint(x:size.width*0.43,y:CGFloat(-i)*8),control1:CGPoint(x:-size.width*0.18,y:CGFloat(i)*28),control2:CGPoint(x:size.width*0.18,y:CGFloat(-i)*28));let n=SKShapeNode(path:p);n.strokeColor=i==0 ? bark : bark.withAlphaComponent(0.72);n.lineWidth=size.height*0.12;n.lineCap=.round;parent.addChild(n) }
+            for i in -1...1 {
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: -size.width * 0.43, y: CGFloat(i) * 8))
+                path.addCurve(
+                    to: CGPoint(x: size.width * 0.43, y: CGFloat(-i) * 8),
+                    control1: CGPoint(x: -size.width * 0.18, y: CGFloat(i) * 28),
+                    control2: CGPoint(x: size.width * 0.18, y: CGFloat(-i) * 28)
+                )
+                let node = SKShapeNode(path: path)
+                node.strokeColor = i == 0 ? bark : bark.withAlphaComponent(0.72)
+                node.lineWidth = size.height * 0.12
+                node.lineCap = .round
+                parent.addChild(node)
+            }
         case .darkTimber:
             addRect(CGSize(width:size.width*0.88,height:size.height*0.54),.zero,UIColor(red:0.10,green:0.14,blue:0.17,alpha:1),3); addRect(CGSize(width:size.width*0.76,height:2),CGPoint(x:0,y:5),glow.withAlphaComponent(0.55),1)
         case .dragonCoal:
             for i in -1...1 { let n=SKShapeNode(path:diamondPath(width:size.width*0.30,height:size.height*0.72));n.fillColor=UIColor(red:0.18+CGFloat(i+1)*0.05,green:0.01,blue:0.04,alpha:1);n.strokeColor=glow.withAlphaComponent(0.70);n.position=CGPoint(x:CGFloat(i)*size.width*0.25,y:CGFloat(abs(i))*-4);n.zRotation=CGFloat(i)*0.13;parent.addChild(n) }
         case .crystalBranch:
-            addRect(CGSize(width:size.width*0.88,height:7),.zero,bark,3,-0.18); for i in -1...1 { let n=SKShapeNode(path:diamondPath(width:size.width*0.17,height:size.height*0.48));n.fillColor=glow.withAlphaComponent(0.88);n.strokeColor=.white;n.position=CGPoint(x:CGFloat(i)*size.width*0.25,y:CGFloat(-i)*5);parent.addChild(n) }
+            addRect(CGSize(width: size.width * 0.88, height: 7), .zero, bark, 3, -0.18)
+            for i in -1...1 {
+                let node = SKShapeNode(
+                    path: diamondPath(width: size.width * 0.17, height: size.height * 0.48)
+                )
+                node.fillColor = glow.withAlphaComponent(0.88)
+                node.strokeColor = .white
+                node.position = CGPoint(x: CGFloat(i) * size.width * 0.25, y: CGFloat(-i) * 5)
+                parent.addChild(node)
+            }
         }
         return parent
     }
