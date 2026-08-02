@@ -6,8 +6,11 @@ struct HomeView: View {
     @State private var feedbackTrigger = 0
     @State private var emptyInventoryHint = false
     @State private var burnSequence = 0
+    @State private var fireBurstSequence = 0
     @State private var isThrowingWood = false
     @State private var showBurnConfirmation = false
+    @State private var showWoodReward = false
+    @State private var rewardedWoodCount = 0
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
@@ -20,22 +23,26 @@ struct HomeView: View {
                         background(time: time)
                         environmentLight(flicker: flicker)
 
-                        WoodPileView(heat: appModel.state.heat, burnSequence: burnSequence)
+                        WoodPileView(heat: appModel.state.heat, burnSequence: fireBurstSequence)
                             .frame(width: min(proxy.size.width * 0.66, 310), height: 150)
                             .position(x: proxy.size.width / 2, y: proxy.size.height * 0.71)
-
-                        WoodPhysicsView(
-                            burnSequence: burnSequence,
-                            isActive: appModel.isRenderingActive
-                        )
-                        .allowsHitTesting(false)
 
                         FireView(
                             heat: appModel.state.heat,
                             isActive: appModel.isRenderingActive,
-                            burnSequence: burnSequence
+                            burnSequence: fireBurstSequence
                         )
                         .blendMode(.plusLighter)
+                        .allowsHitTesting(false)
+
+                        // Keep the physical log above the flame renderer so the
+                        // whole throw, bounce and landing remain readable.
+                        WoodPhysicsView(
+                            burnSequence: burnSequence,
+                            isActive: appModel.isRenderingActive,
+                            onLogLanded: finishBurn
+                        )
+                        .frame(width: proxy.size.width, height: proxy.size.height)
                         .allowsHitTesting(false)
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
@@ -54,6 +61,19 @@ struct HomeView: View {
                 .presentationDragIndicator(.visible)
         }
         .sensoryFeedback(.impact(weight: .heavy, intensity: 0.82), trigger: feedbackTrigger)
+        .sensoryFeedback(.success, trigger: appModel.woodAwardSequence)
+        .onChange(of: appModel.woodAwardSequence) { _, _ in
+            rewardedWoodCount = appModel.lastAwardedWoodCount
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.70)) {
+                showWoodReward = true
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_300_000_000)
+                withAnimation(.easeOut(duration: 0.24)) {
+                    showWoodReward = false
+                }
+            }
+        }
     }
 
     private func background(time: TimeInterval) -> some View {
@@ -100,16 +120,6 @@ struct HomeView: View {
                         .transition(.opacity)
                 }
 
-                if emptyInventoryHint {
-                    Label("歩くと100歩ごとに薪が増えます", systemImage: "figure.walk")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange.opacity(0.92))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(.black.opacity(0.58), in: Capsule())
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
                 if showBurnConfirmation {
                     Label("薪を1本くべた", systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
@@ -120,6 +130,18 @@ struct HomeView: View {
                         .transition(.scale.combined(with: .opacity))
                 }
 
+                if showWoodReward {
+                    Label("歩いたごほうび！ 薪+\(rewardedWoodCount)", systemImage: "sparkles")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 9)
+                        .background(Color.orange, in: Capsule())
+                        .shadow(color: .orange.opacity(0.45), radius: 14)
+                        .transition(.move(edge: .bottom).combined(with: .scale).combined(with: .opacity))
+                }
+
+                walkMission
                 fireStatus
                 burnButton
             }
@@ -179,7 +201,7 @@ struct HomeView: View {
             Text(appModel.visualState.stage.title)
                 .fontWeight(.semibold)
             Spacer(minLength: 10)
-            Text("火力 \(Int(appModel.state.heat.rounded()))%")
+            Text(fireTimeLabel)
                 .monospacedDigit()
                 .foregroundStyle(.white.opacity(0.68))
         }
@@ -190,6 +212,58 @@ struct HomeView: View {
         .background(.black.opacity(0.52), in: Capsule())
         .overlay(Capsule().stroke(.orange.opacity(0.20), lineWidth: 1))
         .contentTransition(.numericText())
+    }
+
+    private var walkMission: some View {
+        HStack(spacing: 11) {
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.16))
+                Image(systemName: appModel.standardWoodCount == 0 ? "figure.walk.motion" : "figure.walk")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.orange)
+            }
+            .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Text(appModel.standardWoodCount == 0 ? "火を守るため、あと\(stepsUntilNextWood)歩" : "次の薪まで、あと\(stepsUntilNextWood)歩")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                    Spacer(minLength: 4)
+                    Text("約\(walkingMinutes)分")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.orange.opacity(0.90))
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.10))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.orange, .yellow],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(5, proxy.size.width * CGFloat(nextWoodProgress)))
+                    }
+                }
+                .frame(height: 5)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 13)
+        .frame(maxWidth: 340, minHeight: 52)
+        .background(.black.opacity(emptyInventoryHint ? 0.72 : 0.56), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(.orange.opacity(emptyInventoryHint ? 0.65 : 0.22), lineWidth: 1)
+        )
+        .scaleEffect(emptyInventoryHint ? 1.025 : 1)
+        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: emptyInventoryHint)
     }
 
     private var burnButton: some View {
@@ -269,30 +343,37 @@ struct HomeView: View {
     }
 
     private var stepsUntilNextWood: Int {
-        let remainder = appModel.state.totalStepsAllTime % GameConstants.stepsPerWood
-        return remainder == 0 ? GameConstants.stepsPerWood : GameConstants.stepsPerWood - remainder
+        MotivationEngine.stepsUntilNextWood(totalSteps: appModel.state.totalStepsAllTime)
+    }
+
+    private var nextWoodProgress: Double {
+        MotivationEngine.nextWoodProgress(totalSteps: appModel.state.totalStepsAllTime)
+    }
+
+    private var walkingMinutes: Int {
+        MotivationEngine.estimatedWalkingMinutes(for: stepsUntilNextWood)
+    }
+
+    private var fireTimeLabel: String {
+        let hours = MotivationEngine.hoursUntilFlameWeakens(heat: appModel.state.heat)
+        if hours <= 0.5 { return "薪を待っている" }
+        if hours < 24 { return "弱まるまで約\(max(1, Int(hours.rounded())))時間" }
+        return "弱まるまで約\(max(1, Int((hours / 24).rounded())))日"
     }
 
     private func burnWood() {
         guard !isThrowingWood else { return }
 
-        if appModel.burnStandardWood() {
-            feedbackTrigger += 1
+        if appModel.standardWoodCount > 0 {
             burnSequence += 1
             emptyInventoryHint = false
             isThrowingWood = true
 
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 680_000_000)
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
-                    showBurnConfirmation = true
-                }
-                try? await Task.sleep(nanoseconds: 420_000_000)
-                isThrowingWood = false
-                try? await Task.sleep(nanoseconds: 1_100_000_000)
-                withAnimation(.easeOut(duration: 0.22)) {
-                    showBurnConfirmation = false
-                }
+                // A safety net for interruptions: the visual collision normally
+                // finishes the burn first, but the button must never stay locked.
+                try? await Task.sleep(nanoseconds: 1_850_000_000)
+                finishBurn()
             }
         } else {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
@@ -303,6 +384,25 @@ struct HomeView: View {
                 withAnimation(.easeOut(duration: 0.24)) {
                     emptyInventoryHint = false
                 }
+            }
+        }
+    }
+
+    private func finishBurn() {
+        guard isThrowingWood else { return }
+        isThrowingWood = false
+
+        guard appModel.burnStandardWood() else { return }
+        feedbackTrigger += 1
+        fireBurstSequence += 1
+
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+            showBurnConfirmation = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_350_000_000)
+            withAnimation(.easeOut(duration: 0.22)) {
+                showBurnConfirmation = false
             }
         }
     }
