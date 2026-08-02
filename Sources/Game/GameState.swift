@@ -8,6 +8,12 @@ struct GameState: Codable, Equatable {
     var totalStepsAllTime: Int
     var firstLaunchedAt: Date
     var onboardingCompleted: Bool
+    var unlockedWoodIDs: Set<String>
+    var unlockedFlameIDs: Set<String>
+    var unlockedBackgroundIDs: Set<String>
+    var selectedWoodID: String
+    var selectedFlameID: String
+    var selectedBackgroundID: String
 
     private enum CodingKeys: String, CodingKey {
         case heat
@@ -17,6 +23,12 @@ struct GameState: Codable, Equatable {
         case totalStepsAllTime
         case firstLaunchedAt
         case onboardingCompleted
+        case unlockedWoodIDs
+        case unlockedFlameIDs
+        case unlockedBackgroundIDs
+        case selectedWoodID
+        case selectedFlameID
+        case selectedBackgroundID
     }
 
     init(
@@ -26,7 +38,13 @@ struct GameState: Codable, Equatable {
         woodInventory: [String: Int],
         totalStepsAllTime: Int,
         firstLaunchedAt: Date,
-        onboardingCompleted: Bool
+        onboardingCompleted: Bool,
+        unlockedWoodIDs: Set<String> = [WoodCatalog.standard.id],
+        unlockedFlameIDs: Set<String> = [FlameCatalog.natural.id],
+        unlockedBackgroundIDs: Set<String> = [BackgroundCatalog.quietForest.id],
+        selectedWoodID: String = WoodCatalog.standard.id,
+        selectedFlameID: String = FlameCatalog.natural.id,
+        selectedBackgroundID: String = BackgroundCatalog.quietForest.id
     ) {
         self.heat = heat
         self.heatUpdatedAt = heatUpdatedAt
@@ -35,6 +53,12 @@ struct GameState: Codable, Equatable {
         self.totalStepsAllTime = totalStepsAllTime
         self.firstLaunchedAt = firstLaunchedAt
         self.onboardingCompleted = onboardingCompleted
+        self.unlockedWoodIDs = unlockedWoodIDs
+        self.unlockedFlameIDs = unlockedFlameIDs
+        self.unlockedBackgroundIDs = unlockedBackgroundIDs
+        self.selectedWoodID = selectedWoodID
+        self.selectedFlameID = selectedFlameID
+        self.selectedBackgroundID = selectedBackgroundID
     }
 
     init(from decoder: Decoder) throws {
@@ -48,6 +72,15 @@ struct GameState: Codable, Equatable {
         totalStepsAllTime = try container.decodeIfPresent(Int.self, forKey: .totalStepsAllTime) ?? 0
         firstLaunchedAt = try container.decodeIfPresent(Date.self, forKey: .firstLaunchedAt) ?? fallbackDate
         onboardingCompleted = try container.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? false
+        unlockedWoodIDs = try container.decodeIfPresent(Set<String>.self, forKey: .unlockedWoodIDs) ?? WoodCatalog.unlockedIDs(at: totalStepsAllTime)
+        unlockedFlameIDs = try container.decodeIfPresent(Set<String>.self, forKey: .unlockedFlameIDs) ?? FlameCatalog.unlockedIDs(at: totalStepsAllTime)
+        unlockedBackgroundIDs = try container.decodeIfPresent(Set<String>.self, forKey: .unlockedBackgroundIDs) ?? BackgroundCatalog.unlockedIDs(at: totalStepsAllTime)
+        unlockedWoodIDs.insert(WoodCatalog.standard.id)
+        unlockedFlameIDs.insert(FlameCatalog.natural.id)
+        unlockedBackgroundIDs.insert(BackgroundCatalog.quietForest.id)
+        selectedWoodID = try container.decodeIfPresent(String.self, forKey: .selectedWoodID) ?? WoodCatalog.standard.id
+        selectedFlameID = try container.decodeIfPresent(String.self, forKey: .selectedFlameID) ?? FlameCatalog.natural.id
+        selectedBackgroundID = try container.decodeIfPresent(String.self, forKey: .selectedBackgroundID) ?? BackgroundCatalog.quietForest.id
     }
 
     static func initial(at date: Date = Date()) -> GameState {
