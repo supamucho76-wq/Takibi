@@ -3,6 +3,7 @@ import SwiftUI
 struct WoodPileView: View {
     let heat: Double
     let burnSequence: Int
+    let wood: WoodType
 
     @State private var arrivalGlow: Double = 0
 
@@ -16,7 +17,9 @@ struct WoodPileView: View {
                 .blur(radius: 12)
                 .offset(y: 34)
 
-            ForEach(0..<visuals.visibleLogCount, id: \.self) { index in
+            // The base pile stays stable. Newly burned logs now remain as real
+            // SpriteKit bodies instead of appearing here automatically.
+            ForEach(0..<3, id: \.self) { index in
                 Image("WoodLog")
                     .resizable()
                     .scaledToFit()
@@ -26,6 +29,7 @@ struct WoodPileView: View {
                     .brightness(-0.30 + visuals.environmentLight * 0.12)
                     .saturation(0.72 + visuals.environmentLight * 0.30)
                     .shadow(color: .orange.opacity(0.13 * visuals.environmentLight), radius: 7)
+                    .colorMultiply(Color(red: wood.barkTint.red, green: wood.barkTint.green, blue: wood.barkTint.blue).opacity(0.76))
             }
 
             Circle()
@@ -34,7 +38,6 @@ struct WoodPileView: View {
                 .blur(radius: 24)
                 .blendMode(.plusLighter)
         }
-        .animation(.easeInOut(duration: 0.85), value: visuals.visibleLogCount)
         .onChange(of: burnSequence) { _, _ in
             arrivalGlow = 1
             withAnimation(.easeOut(duration: 0.72)) {

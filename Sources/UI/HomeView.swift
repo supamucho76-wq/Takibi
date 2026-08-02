@@ -2,15 +2,17 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject private var appModel: AppModel
+    @StateObject private var woodThrowController = WoodThrowController()
     @State private var settingsPresented = false
+    @State private var collectionPresented = false
     @State private var feedbackTrigger = 0
     @State private var emptyInventoryHint = false
-    @State private var burnSequence = 0
     @State private var fireBurstSequence = 0
     @State private var isThrowingWood = false
     @State private var showBurnConfirmation = false
     @State private var showWoodReward = false
     @State private var rewardedWoodCount = 0
+    @State private var showUnlockReward = false
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
@@ -23,14 +25,15 @@ struct HomeView: View {
                         background(time: time)
                         environmentLight(flicker: flicker)
 
-                        WoodPileView(heat: appModel.state.heat, burnSequence: fireBurstSequence)
+                        WoodPileView(heat: appModel.state.heat, burnSequence: fireBurstSequence, wood: appModel.selectedWood)
                             .frame(width: min(proxy.size.width * 0.66, 310), height: 150)
                             .position(x: proxy.size.width / 2, y: proxy.size.height * 0.71)
 
                         FireView(
                             heat: appModel.state.heat,
                             isActive: appModel.isRenderingActive,
-                            burnSequence: fireBurstSequence
+                            burnSequence: fireBurstSequence,
+                            tint: appModel.selectedFlame.tint
                         )
                         .blendMode(.plusLighter)
                         .allowsHitTesting(false)
@@ -38,7 +41,7 @@ struct HomeView: View {
                         // Keep the physical log above the flame renderer so the
                         // whole throw, bounce and landing remain readable.
                         WoodPhysicsView(
-                            burnSequence: burnSequence,
+                            controller: woodThrowController,
                             isActive: appModel.isRenderingActive,
                             onLogLanded: finishBurn
                         )
@@ -60,6 +63,10 @@ struct HomeView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $collectionPresented) {
+            CollectionView()
+                .environmentObject(appModel)
+        }
         .sensoryFeedback(.impact(weight: .heavy, intensity: 0.82), trigger: feedbackTrigger)
         .sensoryFeedback(.success, trigger: appModel.woodAwardSequence)
         .onChange(of: appModel.woodAwardSequence) { _, _ in
@@ -74,14 +81,26 @@ struct HomeView: View {
                 }
             }
         }
+        .onChange(of: appModel.unlockSequence) { _, _ in
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.68)) { showUnlockReward = true }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                withAnimation(.easeOut(duration: 0.24)) { showUnlockReward = false }
+            }
+        }
     }
 
     private func background(time: TimeInterval) -> some View {
-        Image("CampBackground")
+        let theme = appModel.selectedBackground
+        return Image(theme.imageName)
             .resizable()
             .scaledToFill()
             .scaleEffect(1.025)
             .offset(y: sin(time * 0.075) * 4)
+            .hueRotation(.degrees(theme.hueDegrees))
+            .saturation(theme.saturation)
+            .brightness(theme.brightness)
+            .overlay(Color(theme.overlayTint).opacity(0.16))
             .overlay(Color.black.opacity(0.25))
             .ignoresSafeArea()
     }
@@ -141,6 +160,17 @@ struct HomeView: View {
                         .transition(.move(edge: .bottom).combined(with: .scale).combined(with: .opacity))
                 }
 
+                if showUnlockReward, let reward = appModel.lastUnlockedReward {
+                    Label("新発見：\(reward.name)（\(reward.kind.rawValue)）", systemImage: "star.circle.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 9)
+                        .background(Color.purple.opacity(0.92), in: Capsule())
+                        .shadow(color: .purple.opacity(0.55), radius: 16)
+                        .transition(.move(edge: .bottom).combined(with: .scale).combined(with: .opacity))
+                }
+
                 walkMission
                 fireStatus
                 burnButton
@@ -165,11 +195,23 @@ struct HomeView: View {
 
             hudMetric(
                 icon: "square.stack.3d.up.fill",
-                value: "\(appModel.standardWoodCount)本",
-                label: "薪"
+                value: "\(appModel.totalWoodCount)本",
+                label: "全ての薪"
             )
 
             Spacer(minLength: 8)
+
+            Button {
+                collectionPresented = true
+            } label: {
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 36, height: 40)
+                    .background(.white.opacity(0.08), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("コレクション")
 
             Button {
                 settingsPresented = true
@@ -198,7 +240,7 @@ struct HomeView: View {
         HStack(spacing: 8) {
             Image(systemName: appModel.visualState.stage.systemImage)
                 .foregroundStyle(appModel.visualState.stage.tint)
-            Text(appModel.visualState.stage.title)
+            Text("\(appModel.visualState.stage.title)・\(appModel.selectedFlame.name)")
                 .fontWeight(.semibold)
             Spacer(minLength: 10)
             Text(fireTimeLabel)
@@ -219,7 +261,7 @@ struct HomeView: View {
             ZStack {
                 Circle()
                     .fill(Color.orange.opacity(0.16))
-                Image(systemName: appModel.standardWoodCount == 0 ? "figure.walk.motion" : "figure.walk")
+                Image(systemName: appModel.totalWoodCount == 0 ? "figure.walk.motion" : "figure.walk")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.orange)
             }
@@ -227,7 +269,7 @@ struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 5) {
-                    Text(appModel.standardWoodCount == 0 ? "火を守るため、あと\(stepsUntilNextWood)歩" : "次の薪まで、あと\(stepsUntilNextWood)歩")
+                    Text(appModel.totalWoodCount == 0 ? "火を守るため、あと\(stepsUntilNextWood)歩" : "次の薪まで、あと\(stepsUntilNextWood)歩")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
@@ -252,11 +294,22 @@ struct HomeView: View {
                     }
                 }
                 .frame(height: 5)
+
+                if let reward = appModel.nextCollectibleReward {
+                    HStack(spacing: 4) {
+                        Image(systemName: "flag.checkered")
+                        Text("次の発見：\(reward.name)")
+                        Spacer(minLength: 4)
+                        Text("累計 \(reward.unlockSteps.formatted())歩")
+                    }
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.66))
+                }
             }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 13)
-        .frame(maxWidth: 340, minHeight: 52)
+        .frame(maxWidth: 340, minHeight: 66)
         .background(.black.opacity(emptyInventoryHint ? 0.72 : 0.56), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 17, style: .continuous)
@@ -276,16 +329,16 @@ struct HomeView: View {
                     .rotationEffect(.degrees(-8))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("薪をくべる")
+                    Text("\(appModel.selectedWood.name)を投げる")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
-                    Text(appModel.standardWoodCount > 0 ? "炎に薪を1本入れる" : "薪がありません")
+                    Text(appModel.selectedWoodCount > 0 ? "放り投げて、炎へくべる" : "この薪はありません")
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.70))
                 }
 
                 Spacer(minLength: 4)
 
-                Text("\(appModel.standardWoodCount)")
+                Text("\(appModel.selectedWoodCount)")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .frame(width: 34, height: 34)
@@ -299,7 +352,7 @@ struct HomeView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: appModel.standardWoodCount > 0
+                            colors: appModel.selectedWoodCount > 0
                                 ? [Color.orange.opacity(0.90), Color.red.opacity(0.78)]
                                 : [Color.gray.opacity(0.46), Color.black.opacity(0.62)],
                             startPoint: .topLeading,
@@ -311,7 +364,7 @@ struct HomeView: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(.white.opacity(0.18), lineWidth: 1)
             )
-            .shadow(color: .orange.opacity(appModel.standardWoodCount > 0 ? 0.30 : 0), radius: 18, y: 7)
+            .shadow(color: .orange.opacity(appModel.selectedWoodCount > 0 ? 0.30 : 0), radius: 18, y: 7)
         }
         .buttonStyle(BurnButtonStyle())
         .disabled(isThrowingWood)
@@ -364,16 +417,17 @@ struct HomeView: View {
     private func burnWood() {
         guard !isThrowingWood else { return }
 
-        if appModel.standardWoodCount > 0 {
-            burnSequence += 1
+        if appModel.selectedWoodCount > 0 {
             emptyInventoryHint = false
             isThrowingWood = true
+            woodThrowController.throwWood(appModel.selectedWood)
 
             Task { @MainActor in
-                // A safety net for interruptions: the visual collision normally
-                // finishes the burn first, but the button must never stay locked.
-                try? await Task.sleep(nanoseconds: 1_850_000_000)
-                finishBurn()
+                // Never consume a log or flare the fire without a visible
+                // landing. This timeout only unlocks the button after an
+                // interrupted animation; the physics impact performs the burn.
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if isThrowingWood { isThrowingWood = false }
             }
         } else {
             withAnimation(.spring(response: 0.34, dampingFraction: 0.76)) {
@@ -392,7 +446,7 @@ struct HomeView: View {
         guard isThrowingWood else { return }
         isThrowingWood = false
 
-        guard appModel.burnStandardWood() else { return }
+        guard appModel.burnSelectedWood() != nil else { return }
         feedbackTrigger += 1
         fireBurstSequence += 1
 

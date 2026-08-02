@@ -4,47 +4,48 @@ import SpriteKit
 import SwiftUI
 import UIKit
 
+@MainActor
+final class WoodThrowController: ObservableObject {
+    fileprivate weak var scene: WoodPhysicsScene?
+    private var pendingWood: [WoodType] = []
+
+    func throwWood(_ wood: WoodType) {
+        pendingWood.append(wood)
+        flushIfReady()
+    }
+
+    fileprivate func attach(_ scene: WoodPhysicsScene) {
+        self.scene = scene
+        flushIfReady()
+    }
+
+    fileprivate func sceneWasResized() {
+        flushIfReady()
+    }
+
+    private func flushIfReady() {
+        guard let scene, scene.size.width > 1, scene.size.height > 1, !pendingWood.isEmpty else { return }
+        let queued = pendingWood
+        pendingWood.removeAll()
+        for (index, wood) in queued.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.16) { [weak scene] in
+                scene?.throwLog(wood)
+            }
+        }
+    }
+}
+
 struct WoodPhysicsView: UIViewRepresentable {
-    let burnSequence: Int
+    @ObservedObject var controller: WoodThrowController
     let isActive: Bool
     let onLogLanded: () -> Void
 
     final class Coordinator {
         fileprivate let scene = WoodPhysicsScene()
-        fileprivate var lastBurnSequence = 0
-        fileprivate var pendingThrows = 0
         fileprivate var onLogLanded: (() -> Void)?
-
-        fileprivate func resize(to size: CGSize) {
-            guard size.width > 1, size.height > 1 else { return }
-            if scene.size != size {
-                scene.size = size
-            }
-            flushThrows()
-        }
-
-        fileprivate func enqueueThrows(_ count: Int) {
-            pendingThrows += max(0, count)
-            flushThrows()
-        }
-
-        private func flushThrows() {
-            guard scene.size.width > 1, scene.size.height > 1, pendingThrows > 0 else { return }
-            let count = pendingThrows
-            pendingThrows = 0
-
-            for index in 0..<count {
-                let currentScene = scene
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.13) { [weak currentScene] in
-                    currentScene?.throwLog()
-                }
-            }
-        }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> WoodPhysicsSKView {
         let view = WoodPhysicsSKView(frame: .zero)
@@ -56,15 +57,15 @@ struct WoodPhysicsView: UIViewRepresentable {
         let scene = context.coordinator.scene
         scene.scaleMode = .resizeFill
         scene.backgroundColor = .clear
-        scene.onFirstImpact = { [weak coordinator = context.coordinator] in
-            coordinator?.onLogLanded?()
-        }
-        view.presentScene(scene)
-        context.coordinator.lastBurnSequence = burnSequence
+        scene.onFirstImpact = { [weak coordinator = context.coordinator] in coordinator?.onLogLanded?() }
         context.coordinator.onLogLanded = onLogLanded
+        view.presentScene(scene)
+        controller.attach(scene)
 
-        view.onLayout = { [weak coordinator = context.coordinator] size in
-            coordinator?.resize(to: size)
+        view.onLayout = { [weak controller, weak scene] size in
+            guard size.width > 1, size.height > 1, let scene else { return }
+            scene.size = size
+            controller?.sceneWasResized()
         }
         return view
     }
@@ -73,30 +74,18 @@ struct WoodPhysicsView: UIViewRepresentable {
         view.preferredFramesPerSecond = ProcessInfo.processInfo.isLowPowerModeEnabled ? 30 : 60
         view.isPaused = !isActive
         context.coordinator.onLogLanded = onLogLanded
-        context.coordinator.resize(to: view.bounds.size)
-
-        if burnSequence > context.coordinator.lastBurnSequence {
-            let newThrows = burnSequence - context.coordinator.lastBurnSequence
-            context.coordinator.lastBurnSequence = burnSequence
-            context.coordinator.enqueueThrows(newThrows)
-        } else if burnSequence < context.coordinator.lastBurnSequence {
-            context.coordinator.lastBurnSequence = burnSequence
+        controller.attach(context.coordinator.scene)
+        if view.bounds.width > 1, view.bounds.height > 1 {
+            context.coordinator.scene.size = view.bounds.size
+            controller.sceneWasResized()
         }
     }
 }
 
 final class WoodPhysicsSKView: SKView {
     var onLayout: ((CGSize) -> Void)?
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        onLayout?(bounds.size)
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        onLayout?(bounds.size)
-    }
+    override func layoutSubviews() { super.layoutSubviews(); onLayout?(bounds.size) }
+    override func didMoveToWindow() { super.didMoveToWindow(); onLayout?(bounds.size) }
 }
 
 fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
@@ -114,123 +103,132 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
 
     override init() {
         super.init(size: .zero)
-        physicsWorld.gravity = CGVector(dx: 0, dy: -860)
+        physicsWorld.gravity = CGVector(dx: 0, dy: -920)
         physicsWorld.contactDelegate = self
         anchorPoint = .zero
     }
 
-    required init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
+    required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func didChangeSize(_ oldSize: CGSize) { super.didChangeSize(oldSize); rebuildPileColliders() }
 
-    override func didChangeSize(_ oldSize: CGSize) {
-        super.didChangeSize(oldSize)
-        rebuildPileColliders()
-    }
-
-    func throwLog() {
+    func throwLog(_ wood: WoodType) {
         guard size.width > 1, size.height > 1 else { return }
 
         let texture = SKTexture(imageNamed: "WoodLog")
         texture.filteringMode = .linear
-
         let log = SKSpriteNode(texture: texture)
         log.name = "thrown-log"
         log.userData = ["hasLanded": false]
-        log.size = CGSize(width: min(size.width * 0.27, 108), height: 48)
-        log.zPosition = 20
+        log.size = CGSize(width: min(size.width * 0.34, 138), height: 60)
+        log.zPosition = 100
+        log.color = UIColor(red: CGFloat(wood.barkTint.red), green: CGFloat(wood.barkTint.green), blue: CGFloat(wood.barkTint.blue), alpha: 1)
+        log.colorBlendFactor = 0.34
 
         let startsLeft = Bool.random()
-        let startX = size.width * (startsLeft ? CGFloat.random(in: 0.26...0.42) : CGFloat.random(in: 0.58...0.74))
-        log.position = CGPoint(x: startX, y: max(54, size.height * 0.065))
-        log.zRotation = CGFloat.random(in: -0.48...0.48)
-        log.setScale(0.72)
+        let startX: CGFloat = startsLeft ? -log.size.width * 0.62 : size.width + log.size.width * 0.62
+        let startY = size.height * CGFloat.random(in: 0.34...0.43)
+        log.position = CGPoint(x: startX, y: startY)
+        log.zRotation = CGFloat.random(in: -0.7...0.7)
+        log.setScale(0.80)
 
-        let body = SKPhysicsBody(rectangleOf: CGSize(width: log.size.width * 0.82, height: log.size.height * 0.48))
-        body.mass = CGFloat.random(in: 0.075...0.105)
-        body.friction = 0.86
-        body.restitution = CGFloat.random(in: 0.25...0.38)
-        body.linearDamping = 0.11
-        body.angularDamping = 0.52
+        let body = SKPhysicsBody(rectangleOf: CGSize(width: log.size.width * 0.84, height: log.size.height * 0.44))
+        body.mass = max(0.065, 0.092 * CGFloat(wood.weight))
+        body.friction = 0.92
+        body.restitution = CGFloat.random(in: 0.28...0.43)
+        body.linearDamping = 0.08
+        body.angularDamping = 0.46
         body.allowsRotation = true
         body.usesPreciseCollisionDetection = true
         body.categoryBitMask = Category.log
-        body.collisionBitMask = Category.log | Category.boundary
-        body.contactTestBitMask = Category.log | Category.boundary
+        body.collisionBitMask = Category.log
+        body.contactTestBitMask = Category.log
 
-        let targetX = size.width * 0.5 + CGFloat.random(in: -46...46)
-        let flightTime = CGFloat.random(in: 0.72...0.88)
+        let flightTime = CGFloat.random(in: 0.94...1.12)
+        let target = CGPoint(x: size.width * 0.5 + CGFloat.random(in: -52...52), y: size.height * 0.285 + 42)
+        let gravity = physicsWorld.gravity.dy
         body.velocity = CGVector(
-            dx: (targetX - startX) / flightTime,
-            dy: CGFloat.random(in: 640...710)
+            dx: (target.x - startX) / flightTime,
+            dy: (target.y - startY - 0.5 * gravity * flightTime * flightTime) / flightTime
         )
-        body.angularVelocity = CGFloat.random(in: -7.4...7.4)
+        body.angularVelocity = CGFloat.random(in: -9.5...9.5)
         log.physicsBody = body
 
         addChild(log)
-        log.run(.scale(to: CGFloat.random(in: 0.94...1.04), duration: 0.22))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.62) { [weak body] in
+        addMotionTrail(to: log, tint: wood.flameTint)
+        log.run(.scale(to: CGFloat.random(in: 0.98...1.08), duration: 0.30))
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.50) { [weak body] in
+            body?.collisionBitMask = Category.log | Category.boundary
+            body?.contactTestBitMask = Category.log | Category.boundary
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(flightTime * 0.70)) { [weak body] in
             body?.collisionBitMask = Category.log | Category.pile | Category.boundary
             body?.contactTestBitMask = Category.log | Category.pile | Category.boundary
         }
+
         restingLogs.append(log)
         trimOldLogs()
     }
 
     func didBegin(_ contact: SKPhysicsContact) {
         let categories = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
-        guard categories & Category.log != 0 else { return }
-        guard contact.collisionImpulse > 0.45 else { return }
-
+        guard categories & Category.log != 0, contact.collisionImpulse > 0.32 else { return }
         let logNode = contact.bodyA.categoryBitMask == Category.log ? contact.bodyA.node : contact.bodyB.node
-        if categories & Category.pile != 0,
-           logNode?.userData?["hasLanded"] as? Bool != true {
+
+        if categories & Category.pile != 0, logNode?.userData?["hasLanded"] as? Bool != true {
             logNode?.userData?["hasLanded"] = true
             onFirstImpact?()
         }
 
         let now = CACurrentMediaTime()
-        guard now - lastImpactTime > 0.075 else { return }
+        guard now - lastImpactTime > 0.065 else { return }
         lastImpactTime = now
-
-        let strength = min(max(contact.collisionImpulse / 22, 0.18), 0.92)
-        UIImpactFeedbackGenerator(style: strength > 0.55 ? .rigid : .light)
-            .impactOccurred(intensity: strength)
+        let strength = min(max(contact.collisionImpulse / 18, 0.20), 1)
+        UIImpactFeedbackGenerator(style: strength > 0.58 ? .rigid : .light).impactOccurred(intensity: strength)
         impactAudio.play(intensity: Float(strength))
         makeImpactParticles(at: contact.contactPoint, strength: strength)
     }
 
-    private func makeImpactParticles(at point: CGPoint, strength: CGFloat) {
-        let flash = SKShapeNode(circleOfRadius: 5 + 4 * strength)
-        flash.fillColor = UIColor.orange.withAlphaComponent(0.42 + 0.26 * strength)
-        flash.strokeColor = .clear
-        flash.position = point
-        flash.zPosition = 24
-        addChild(flash)
-        flash.run(.sequence([
-            .group([.scale(to: 2.2, duration: 0.16), .fadeOut(withDuration: 0.20)]),
-            .removeFromParent()
-        ]))
+    private func addMotionTrail(to log: SKSpriteNode, tint: FlameTint) {
+        let emitter = SKEmitterNode()
+        emitter.particleBirthRate = 28
+        emitter.particleLifetime = 0.24
+        emitter.particleLifetimeRange = 0.08
+        emitter.particlePositionRange = CGVector(dx: 34, dy: 12)
+        emitter.particleScale = 0.055
+        emitter.particleScaleRange = 0.02
+        emitter.particleScaleSpeed = -0.18
+        emitter.particleAlpha = 0.30
+        emitter.particleAlphaSpeed = -1.20
+        emitter.particleColor = UIColor(red: CGFloat(tint.red), green: CGFloat(tint.green), blue: CGFloat(tint.blue), alpha: 1)
+        emitter.particleColorBlendFactor = 1
+        emitter.particleSpeed = 8
+        emitter.targetNode = self
+        emitter.zPosition = 90
+        log.addChild(emitter)
+        emitter.run(.sequence([.wait(forDuration: 1.10), .run { emitter.particleBirthRate = 0 }, .wait(forDuration: 0.35), .removeFromParent()]))
+    }
 
-        let chipCount = Int(3 + strength * 5)
-        for _ in 0..<chipCount {
-            let chip = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 2...5), height: 2), cornerRadius: 1)
-            chip.fillColor = Bool.random() ? UIColor.systemOrange : UIColor(red: 0.52, green: 0.24, blue: 0.08, alpha: 1)
+    private func makeImpactParticles(at point: CGPoint, strength: CGFloat) {
+        let ring = SKShapeNode(circleOfRadius: 7 + 6 * strength)
+        ring.fillColor = .clear
+        ring.strokeColor = UIColor.orange.withAlphaComponent(0.72)
+        ring.lineWidth = 2
+        ring.position = point
+        ring.zPosition = 110
+        addChild(ring)
+        ring.run(.sequence([.group([.scale(to: 2.5, duration: 0.18), .fadeOut(withDuration: 0.22)]), .removeFromParent()]))
+
+        for _ in 0..<Int(5 + strength * 7) {
+            let chip = SKShapeNode(rectOf: CGSize(width: CGFloat.random(in: 3...7), height: 2), cornerRadius: 1)
+            chip.fillColor = Bool.random() ? .systemOrange : UIColor(red: 0.45, green: 0.20, blue: 0.06, alpha: 1)
             chip.strokeColor = .clear
             chip.position = point
-            chip.zPosition = 25
+            chip.zPosition = 112
             addChild(chip)
-
-            let dx = CGFloat.random(in: -34...34) * strength
-            let dy = CGFloat.random(in: 18...58) * strength
-            chip.run(.sequence([
-                .group([
-                    .moveBy(x: dx, y: dy, duration: 0.28),
-                    .rotate(byAngle: CGFloat.random(in: -2.6...2.6), duration: 0.28),
-                    .fadeOut(withDuration: 0.32)
-                ]),
-                .removeFromParent()
-            ]))
+            let dx = CGFloat.random(in: -48...48) * strength
+            let dy = CGFloat.random(in: 24...76) * strength
+            chip.run(.sequence([.group([.moveBy(x: dx, y: dy, duration: 0.32), .rotate(byAngle: CGFloat.random(in: -3.2...3.2), duration: 0.32), .fadeOut(withDuration: 0.38)]), .removeFromParent()]))
         }
     }
 
@@ -238,15 +236,13 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
         colliders.forEach { $0.removeFromParent() }
         colliders.removeAll()
         guard size.width > 1, size.height > 1 else { return }
-
         let centerX = size.width / 2
         let pileY = size.height * 0.285
-        addCollider(size: CGSize(width: min(size.width * 0.72, 282), height: 14), position: CGPoint(x: centerX, y: pileY - 22), angle: 0, category: Category.pile)
-        addCollider(size: CGSize(width: 154, height: 18), position: CGPoint(x: centerX - 24, y: pileY), angle: 0.21, category: Category.pile)
-        addCollider(size: CGSize(width: 148, height: 18), position: CGPoint(x: centerX + 20, y: pileY + 7), angle: -0.22, category: Category.pile)
-
-        addCollider(size: CGSize(width: 10, height: size.height * 0.42), position: CGPoint(x: 4, y: size.height * 0.24), angle: 0, category: Category.boundary)
-        addCollider(size: CGSize(width: 10, height: size.height * 0.42), position: CGPoint(x: size.width - 4, y: size.height * 0.24), angle: 0, category: Category.boundary)
+        addCollider(size: CGSize(width: min(size.width * 0.74, 292), height: 16), position: CGPoint(x: centerX, y: pileY - 24), angle: 0, category: Category.pile)
+        addCollider(size: CGSize(width: 160, height: 20), position: CGPoint(x: centerX - 28, y: pileY), angle: 0.22, category: Category.pile)
+        addCollider(size: CGSize(width: 154, height: 20), position: CGPoint(x: centerX + 24, y: pileY + 8), angle: -0.24, category: Category.pile)
+        addCollider(size: CGSize(width: 10, height: size.height * 0.52), position: CGPoint(x: 4, y: size.height * 0.28), angle: 0, category: Category.boundary)
+        addCollider(size: CGSize(width: 10, height: size.height * 0.52), position: CGPoint(x: size.width - 4, y: size.height * 0.28), angle: 0, category: Category.boundary)
     }
 
     private func addCollider(size: CGSize, position: CGPoint, angle: CGFloat, category: UInt32) {
@@ -255,8 +251,8 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
         node.zRotation = angle
         node.physicsBody = SKPhysicsBody(rectangleOf: size)
         node.physicsBody?.isDynamic = false
-        node.physicsBody?.friction = 0.94
-        node.physicsBody?.restitution = 0.19
+        node.physicsBody?.friction = 0.96
+        node.physicsBody?.restitution = 0.22
         node.physicsBody?.categoryBitMask = category
         node.physicsBody?.collisionBitMask = Category.log
         node.physicsBody?.contactTestBitMask = Category.log
@@ -265,13 +261,11 @@ fileprivate final class WoodPhysicsScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func trimOldLogs() {
-        guard restingLogs.count > 8 else { return }
-        let overflow = restingLogs.count - 8
+        guard restingLogs.count > 9 else { return }
+        let overflow = restingLogs.count - 9
         let removed = restingLogs.prefix(overflow)
         restingLogs.removeFirst(overflow)
-        for log in removed {
-            log.run(.sequence([.fadeOut(withDuration: 0.38), .removeFromParent()]))
-        }
+        removed.forEach { $0.run(.sequence([.fadeOut(withDuration: 0.45), .removeFromParent()])) }
     }
 }
 
@@ -294,23 +288,24 @@ fileprivate final class WoodImpactAudio {
         if !player.isPlaying { player.play() }
         guard let buffer = makeBuffer(intensity: intensity) else { return }
         player.scheduleBuffer(buffer)
+        if intensity > 0.60, let echo = makeBuffer(intensity: intensity * 0.44) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.075) { [weak player] in player?.scheduleBuffer(echo) }
+        }
     }
 
     private func makeBuffer(intensity: Float) -> AVAudioPCMBuffer? {
-        let frameCount = AVAudioFrameCount(4_850)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
-              let samples = buffer.floatChannelData?[0] else { return nil }
+        let frameCount = AVAudioFrameCount(5_400)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount), let samples = buffer.floatChannelData?[0] else { return nil }
         buffer.frameLength = frameCount
-
-        let level = min(max(intensity, 0.16), 0.90)
-        let pitch = Float.random(in: 145...215)
+        let level = min(max(intensity, 0.16), 0.92)
+        let pitch = Float.random(in: 118...205)
         for frame in 0..<Int(frameCount) {
             let time = Float(frame) / 44_100
-            let decay = Float(Foundation.exp(Double(-31 * time)))
+            let decay = Float(Foundation.exp(Double(-27 * time)))
             sampleSeed = 1_664_525 &* sampleSeed &+ 1_013_904_223
             let noise = Float(sampleSeed & 0xFFFF) / Float(0xFFFF) * 2 - 1
-            let knock = sin(2 * .pi * pitch * time) + 0.44 * sin(2 * .pi * pitch * 2.31 * time)
-            samples[frame] = (knock * 0.34 + noise * 0.24) * decay * level
+            let knock = sin(2 * .pi * pitch * time) + 0.54 * sin(2 * .pi * pitch * 2.37 * time)
+            samples[frame] = (knock * 0.36 + noise * 0.25) * decay * level
         }
         return buffer
     }
