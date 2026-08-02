@@ -100,8 +100,9 @@ final class FireRenderer: NSObject, MTKViewDelegate {
         let now = CACurrentMediaTime()
         let delta = min(max(now - lastFrameTime, 1.0 / 240.0), 0.1)
         lastFrameTime = now
-        displayedHeat += (heat - displayedHeat) * min(1, Float(delta) * 2.8)
-        burstEnergy = max(0, burstEnergy - Float(delta) * 1.35)
+        // A real fire swells over several seconds instead of instantly scaling.
+        displayedHeat += (heat - displayedHeat) * min(1, Float(delta) * 1.05)
+        burstEnergy = max(0, burstEnergy - Float(delta) * 1.55)
 
         updateParticles(deltaTime: Float(delta), heat: displayedHeat)
 
