@@ -62,7 +62,7 @@ float3 blackBodyRamp(float temperature) {
     const float3 red = float3(0.761, 0.165, 0.000);
     const float3 orange = float3(1.000, 0.416, 0.000);
     const float3 yellow = float3(1.000, 0.761, 0.278);
-    const float3 whiteHot = float3(1.000, 0.953, 0.839);
+    const float3 whiteHot = float3(1.000, 0.875, 0.540);
 
     float3 color = mix(darkRed, red, smoothstep(0.05, 0.31, temperature));
     color = mix(color, orange, smoothstep(0.27, 0.53, temperature));
@@ -196,7 +196,12 @@ fragment float4 fireFragment(QuadOut in [[stage_in]], constant FireUniforms &u [
     float ember = exp(-dot(emberP, emberP) * 1.38) * emberBreath * emberNoise;
     ember *= mix(0.52, 1.0, heat);
 
-    float3 flameColor = blackBodyRamp(temperature) * temperature * mix(1.08, 1.66, heat);
+    float3 flameColor = blackBodyRamp(temperature) * temperature * mix(1.02, 1.52, heat);
+    float blueBase = stagedShape
+        * smoothstep(-0.025, 0.025, warpedY)
+        * (1.0 - smoothstep(0.10, 0.22, warpedYN))
+        * smoothstep(0.48, 0.90, heat);
+    flameColor += float3(0.12, 0.28, 0.82) * blueBase * 0.36;
     float3 haloColor = float3(1.0, 0.16, 0.008) * halo;
     float3 emberColor = mix(float3(0.36, 0.006, 0.0), float3(1.0, 0.105, 0.006), ember) * ember;
 
