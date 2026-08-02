@@ -7,7 +7,6 @@ struct HomeView: View {
     @State private var emptyInventoryHint = false
     @State private var burnSequence = 0
     @State private var isThrowingWood = false
-    @State private var throwProgress: CGFloat = 0
     @State private var showBurnConfirmation = false
 
     var body: some View {
@@ -15,37 +14,39 @@ struct HomeView: View {
             let time = timeline.date.timeIntervalSinceReferenceDate
             let flicker = 0.94 + 0.06 * sin(time * 4.17) + 0.025 * sin(time * 9.73 + 1.4)
 
-            GeometryReader { proxy in
-                ZStack {
-                    background(time: time)
-                    environmentLight(flicker: flicker)
+            ZStack {
+                GeometryReader { proxy in
+                    ZStack {
+                        background(time: time)
+                        environmentLight(flicker: flicker)
 
-                    WoodPileView(heat: appModel.state.heat, burnSequence: burnSequence)
-                        .frame(width: min(proxy.size.width * 0.66, 310), height: 150)
-                        .position(x: proxy.size.width / 2, y: proxy.size.height * 0.71)
+                        WoodPileView(heat: appModel.state.heat, burnSequence: burnSequence)
+                            .frame(width: min(proxy.size.width * 0.66, 310), height: 150)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.71)
 
-                    FireView(
-                        heat: appModel.state.heat,
-                        isActive: appModel.isRenderingActive,
-                        burnSequence: burnSequence
-                    )
-                    .blendMode(.plusLighter)
-                    .allowsHitTesting(false)
-                    .ignoresSafeArea()
+                        WoodPhysicsView(
+                            burnSequence: burnSequence,
+                            isActive: appModel.isRenderingActive
+                        )
+                        .allowsHitTesting(false)
 
-                    if isThrowingWood {
-                        flyingLog(in: proxy.size, safeArea: proxy.safeAreaInsets)
-                            .zIndex(2)
+                        FireView(
+                            heat: appModel.state.heat,
+                            isActive: appModel.isRenderingActive,
+                            burnSequence: burnSequence
+                        )
+                        .blendMode(.plusLighter)
+                        .allowsHitTesting(false)
                     }
-
-                    overlay(in: proxy.size, safeArea: proxy.safeAreaInsets)
-                        .zIndex(3)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
                 }
-                .frame(width: proxy.size.width, height: proxy.size.height)
-                .clipped()
+                .ignoresSafeArea()
+
+                overlay
+                    .zIndex(3)
             }
         }
-        .ignoresSafeArea()
         .sheet(isPresented: $settingsPresented) {
             SettingsView()
                 .environmentObject(appModel)
@@ -83,11 +84,9 @@ struct HomeView: View {
         .allowsHitTesting(false)
     }
 
-    private func overlay(in size: CGSize, safeArea: EdgeInsets) -> some View {
+    private var overlay: some View {
         VStack(spacing: 0) {
             topHUD
-                .padding(.horizontal, 16)
-                .padding(.top, max(safeArea.top + 8, 16))
 
             Spacer(minLength: 12)
 
@@ -124,41 +123,53 @@ struct HomeView: View {
                 fireStatus
                 burnButton
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, max(safeArea.bottom + 12, 18))
         }
-        .frame(width: size.width, height: size.height)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private var topHUD: some View {
-        HStack(spacing: 10) {
-            statusCard(
+        HStack(spacing: 0) {
+            hudMetric(
                 icon: "figure.walk",
                 value: appModel.todaySteps.formatted(),
-                detail: "あと\(stepsUntilNextWood)歩で薪"
+                label: "あと\(stepsUntilNextWood)歩"
             )
 
-            Spacer(minLength: 0)
+            Rectangle()
+                .fill(.white.opacity(0.12))
+                .frame(width: 1, height: 30)
+                .padding(.horizontal, 8)
 
-            statusCard(
+            hudMetric(
                 icon: "square.stack.3d.up.fill",
                 value: "\(appModel.standardWoodCount)本",
-                detail: "持っている薪"
+                label: "薪"
             )
+
+            Spacer(minLength: 8)
 
             Button {
                 settingsPresented = true
             } label: {
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.90))
-                    .frame(width: 46, height: 46)
-                    .background(.ultraThinMaterial.opacity(0.88), in: Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 1))
+                    .frame(width: 40, height: 40)
+                    .background(.white.opacity(0.08), in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("設定")
         }
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 340)
+        .background(.ultraThinMaterial.opacity(0.90), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.13), lineWidth: 1)
+        )
     }
 
     private var fireStatus: some View {
@@ -233,54 +244,28 @@ struct HomeView: View {
         .accessibilityHint("所持している薪を1本使って火を強くします")
     }
 
-    private func statusCard(icon: String, value: String, detail: String) -> some View {
-        HStack(spacing: 9) {
+    private func hudMetric(icon: String, value: String, label: String) -> some View {
+        HStack(spacing: 7) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.orange)
-                .frame(width: 26, height: 26)
-                .background(.orange.opacity(0.13), in: Circle())
+                .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
-                Text(detail)
-                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(label)
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.58))
                     .lineLimit(1)
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .frame(height: 46)
-        .background(.ultraThinMaterial.opacity(0.88), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
-        )
-    }
-
-    private func flyingLog(in size: CGSize, safeArea: EdgeInsets) -> some View {
-        let startY = size.height - max(safeArea.bottom, 12) - 92
-        let endY = size.height * 0.70
-        let arc = CGFloat(sin(Double(throwProgress) * .pi)) * 42
-        let fade = throwProgress < 0.82 ? 1.0 : Double(max(0, (1 - throwProgress) / 0.18))
-
-        return Image("WoodLog")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 104, height: 64)
-            .rotationEffect(.degrees(-12 + Double(throwProgress) * 380))
-            .scaleEffect(1 - throwProgress * 0.48)
-            .opacity(fade)
-            .shadow(color: .orange.opacity(0.75), radius: 16)
-            .position(
-                x: size.width / 2 + arc,
-                y: startY + (endY - startY) * throwProgress
-            )
-            .allowsHitTesting(false)
+        .frame(minWidth: 88, alignment: .leading)
     }
 
     private var stepsUntilNextWood: Int {
@@ -296,20 +281,14 @@ struct HomeView: View {
             burnSequence += 1
             emptyInventoryHint = false
             isThrowingWood = true
-            throwProgress = 0
-
-            withAnimation(.easeInOut(duration: 0.72)) {
-                throwProgress = 1
-            }
 
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 560_000_000)
+                try? await Task.sleep(nanoseconds: 680_000_000)
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                     showBurnConfirmation = true
                 }
-                try? await Task.sleep(nanoseconds: 260_000_000)
+                try? await Task.sleep(nanoseconds: 420_000_000)
                 isThrowingWood = false
-                throwProgress = 0
                 try? await Task.sleep(nanoseconds: 1_100_000_000)
                 withAnimation(.easeOut(duration: 0.22)) {
                     showBurnConfirmation = false
