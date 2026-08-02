@@ -10,6 +10,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var pedometerMessage: String?
     @Published private(set) var isReady = false
     @Published private(set) var isRenderingActive = true
+    @Published private(set) var woodAwardSequence = 0
+    @Published private(set) var lastAwardedWoodCount = 0
 
     private let store: GameStateStore
     private let pedometer: PedometerService
@@ -91,6 +93,8 @@ final class AppModel: ObservableObject {
             todaySteps = 0
             todayBaselineSteps = 0
             liveCommittedSteps = 0
+            woodAwardSequence = 0
+            lastAwardedWoodCount = 0
             pedometerMessage = nil
             motionPermission = pedometer.permissionState
         }
@@ -202,6 +206,8 @@ final class AppModel: ObservableObject {
         state.totalStepsAllTime = result.newTotalSteps
         if result.awardedWood > 0 {
             state.woodInventory[WoodCatalog.standard.id, default: 0] += result.awardedWood
+            lastAwardedWoodCount = result.awardedWood
+            woodAwardSequence += 1
         }
         state.lastPedometerProcessedAt = max(state.lastPedometerProcessedAt, processedAt)
         scheduleSave()
